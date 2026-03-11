@@ -202,6 +202,69 @@ Xilinx FPGA device configuration.
 **Supported Devices:**
 - Xilinx UltraScale+
 
+## Codec & Error Detection
+
+### `codec.crc`
+
+Cyclic Redundancy Check (CRC) computation for error detection.
+
+**Key Types:**
+- `crc_calculator<Width, P, Init, XorOut, ReflectInput, ReflectOutput, MaxBytes, ThreadCount>` - CRC calculator
+
+**Key Functions:**
+- `compute` - Process input data and compute CRC value
+
+**Example:**
+```kanagawa
+// CRC-32 with 64 bytes/cycle input width and 4 streams
+crc_calculator<32, 0xEDB88320, 0xFFFFFFFF, 0xFFFFFFFF, true, true, 64, 4> crc_calc;
+```
+
+## Debug & Testing
+
+### `debug.print`
+
+Debug output utilities for simulation.
+
+**Key Functions:**
+- `print(x)` - Format argument as string and write to simulation log
+- `println(x)` - Format and write as a line to simulation log
+
+**Example:**
+```kanagawa
+const uint32 foo = 10;
+const bool bar = true;
+print("{foo=}\n{bar=}");
+```
+
+### `debug.sim_assert`
+
+Simulation assertions for validation.
+
+**Key Functions:**
+- `assert(condition)` - Runtime assertion check in simulation
+
+### `test.unit`
+
+Unit testing framework for Kanagawa designs.
+
+**Key Functions:**
+- Test runner utilities for automated testing
+
+## Compiler Configuration
+
+### `compiler.config`
+
+Compiler configuration and target device selection.
+
+### `compiler.hal`
+
+Hardware Abstraction Layer (HAL) for device-specific features.
+
+### `compiler.options`
+
+Compiler option handling and configuration.
+
 ## Utility Modules
 
 ### `data.optional`
@@ -223,6 +286,25 @@ Tuple types for grouping values.
 
 Ordering and comparison functions.
 
+### `data.bits`
+
+Bit manipulation utilities.
+
+**Key Functions:**
+- Bit-level operations and transformations
+
+### `data.string`
+
+String handling utilities.
+
+### `data.datetime`
+
+Date and time utilities.
+
+### `data.random`
+
+Random number generation for hardware.
+
 ### `type.stdtype`
 
 Standard type aliases (uint8, int32, etc.).
@@ -230,3 +312,15 @@ Standard type aliases (uint8, int32, etc.).
 ### `type.coerce`
 
 Type coercion and casting utilities.
+
+### `type.cstdint`
+
+C-compatible standard integer types.
+
+### `type.cstddef`
+
+C-compatible standard definitions.
+
+### `type.newtype`
+
+New type creation utilities.
