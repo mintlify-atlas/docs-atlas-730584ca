@@ -1,0 +1,182 @@
+{
+  "projectType": "framework",
+  "projectName": "Kanagawa",
+  "projectDescription": "High-level synthesis language for hardware design with wavefront threading execution model",
+  "theme": "aspen",
+  "primaryColor": "#4ca5c3",
+  "lightColor": "#9bcddb",
+  "darkColor": "#686868",
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Get Started",
+            "pages": [
+              "introduction",
+              "quickstart",
+              "installation"
+            ]
+          },
+          {
+            "group": "Core Concepts",
+            "pages": [
+              "concepts/wavefront-threading",
+              "concepts/memory-model",
+              "concepts/concurrency",
+              "concepts/mapping-to-hardware"
+            ]
+          },
+          {
+            "group": "Language Guide",
+            "pages": [
+              "language/syntax",
+              "language/types",
+              "language/functions",
+              "language/classes",
+              "language/threads",
+              "language/control-flow",
+              "language/memory"
+            ]
+          },
+          {
+            "group": "Best Practices",
+            "pages": [
+              "best-practices/effective-kanagawa",
+              "best-practices/design-patterns",
+              "best-practices/optimization"
+            ]
+          },
+          {
+            "group": "Compiler",
+            "pages": [
+              "compiler/usage",
+              "compiler/options",
+              "compiler/code-generation",
+              "compiler/debugging"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "Standard Library",
+        "groups": [
+          {
+            "group": "Overview",
+            "pages": [
+              "library/overview",
+              "library/modules"
+            ]
+          },
+          {
+            "group": "Data Structures",
+            "pages": [
+              "library/data/arrays",
+              "library/data/vectors",
+              "library/data/fifos",
+              "library/data/buffers",
+              "library/data/hash-tables",
+              "library/data/memories"
+            ]
+          },
+          {
+            "group": "Numeric Types",
+            "pages": [
+              "library/numeric/integers",
+              "library/numeric/fixed-point",
+              "library/numeric/floating-point",
+              "library/numeric/complex"
+            ]
+          },
+          {
+            "group": "Synchronization",
+            "pages": [
+              "library/sync/atomic",
+              "library/sync/locks"
+            ]
+          },
+          {
+            "group": "Control Flow",
+            "pages": [
+              "library/control/loops",
+              "library/control/async",
+              "library/control/fsm"
+            ]
+          },
+          {
+            "group": "IP Blocks",
+            "pages": [
+              "library/ip/risc-v-processor",
+              "library/ip/intel-devices",
+              "library/ip/xilinx-devices"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "Examples",
+        "groups": [
+          {
+            "group": "Getting Started",
+            "pages": [
+              "examples/hello-world",
+              "examples/basic-pipeline",
+              "examples/simple-accelerator"
+            ]
+          },
+          {
+            "group": "Advanced",
+            "pages": [
+              "examples/risc-v-core",
+              "examples/cryptographic-accelerator",
+              "examples/custom-instructions"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "Resources",
+        "groups": [
+          {
+            "group": "Reference",
+            "pages": [
+              "resources/building",
+              "resources/testing",
+              "resources/changelog"
+            ]
+          },
+          {
+            "group": "Community",
+            "pages": [
+              "resources/contributing",
+              "resources/support",
+              "resources/code-of-conduct"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "Wavefront Threading execution model for deterministic concurrency",
+    "Wavefront Consistency memory model aligned with synchronous circuits",
+    "Composable abstractions with functions, lambdas, and strong typing",
+    "Rich standard library with data structures and IP blocks",
+    "RISC-V processor cores with multi-hart support",
+    "Floating-point arithmetic libraries",
+    "Compiles to efficient SystemVerilog RTL",
+    "Competitive performance with hand-written HDL"
+  ],
+  "publicApiSurface": [
+    "kanagawa compiler executable",
+    "Standard library modules: base, data, numeric, sync, control, processor",
+    "RISC_V class template for processor cores",
+    "Data structures: Array, Vector, FIFO, Buffer, HashTable, Memory",
+    "Numeric types: fixed-point, float32, float64, complex",
+    "Synchronization primitives: atomic, lock",
+    "Control flow: Loop, FSM, async rendezvous",
+    "Device IP: Intel and Xilinx FPGA primitives",
+    "Type system: integers (arbitrary width), structs, unions, enums, classes"
+  ]
+}
