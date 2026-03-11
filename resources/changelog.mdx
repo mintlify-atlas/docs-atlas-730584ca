@@ -1,0 +1,108 @@
+---
+title: Changelog
+description: Track the version history and notable changes to the Kanagawa project
+---
+
+All notable changes to the Kanagawa project are documented here. For detailed commit history, check the [release summaries](https://github.com/microsoft/kanagawa/releases).
+
+## [1.2.0] - 2025-11-09
+
+### Added
+- **macOS (ARM64) support** - Full support for building on Apple Silicon
+
+### Fixed
+- Add runtime/rtl to release package
+
+---
+
+## [1.1.0] - 2025-11-05
+
+### Added
+- **Windows support** - Build and run the compiler on Windows
+- **Visual Studio Code extension** - Enhanced development experience with syntax highlighting and language features
+- **Robust test and release automation** - CI/CD via GitHub Actions for automated testing and releases
+- **Enhanced formatting** - Improved Kanagawa syntax formatting in Sandcastle documentation
+- **Auto-publish library docs** - Automatic publication of library code documentation
+
+### Fixed
+- Fix overactive warning about missing `transaction_size(N)` attribute
+- Disallow whitespace within module names
+- Various small improvements to unit tests from initial OSS release
+
+---
+
+## [1.0.1] - 2025-10-08
+
+### Added
+- Add license comment to README.md
+
+---
+
+## [1.0.0] - 2025-10-08
+
+### Added
+- **Initial public release** of Kanagawa hardware description language
+
+<Note>
+  This was the first open source release of Kanagawa to the public.
+</Note>
+
+---
+
+## Release Process
+
+### Nightly Pre-releases
+
+Kanagawa has a GitHub workflow that runs nightly at 08:00 UTC. If there have been changes to the main branch since the last run, it will:
+- Prepare a new release
+- Mark it as a pre-release
+- Name it based on the date
+
+### Official Releases
+
+For official releases, the process follows these steps:
+
+<Steps>
+  <Step title="Update CHANGELOG.md">
+    Add a summary of changes since the last official release. Check:
+    - Commit history
+    - Nightly release descriptions
+  </Step>
+
+  <Step title="Update VERSION file">
+    Increment the version number:
+    - **Major** - Breaking changes
+    - **Minor** - New features (backward compatible)
+    - **Patch** - Bug fixes
+  </Step>
+
+  <Step title="Create and merge PR">
+    Prepare a pull request with the changes and merge to main
+  </Step>
+
+  <Step title="Run release workflow">
+    Execute the Release workflow (`release.yml`) which will:
+    - Build the release
+    - Publish the release
+    - Assign a version tag
+  </Step>
+</Steps>
+
+## Version History
+
+<CardGroup cols={2}>
+  <Card title="Latest Release" icon="tag" href="https://github.com/microsoft/kanagawa/releases/latest">
+    View the most recent stable release
+  </Card>
+  <Card title="All Releases" icon="clock-rotate-left" href="https://github.com/microsoft/kanagawa/releases">
+    Browse complete release history
+  </Card>
+</CardGroup>
+
+## Semantic Versioning
+
+Kanagawa follows [Semantic Versioning](https://semver.org/) (SemVer):
+
+- **MAJOR** version for incompatible API changes
+- **MINOR** version for backward-compatible functionality additions
+- **PATCH** version for backward-compatible bug fixes

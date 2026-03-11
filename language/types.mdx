@@ -1,0 +1,73 @@
+---
+title:'Types'
+description:'Kanagawa type system'
+---
+
+## Integer Types
+
+Kanagawa supports arbitrary-width integers:
+
+```kanagawa
+uint7 x;   // 7-bit unsigned
+int66 y;   // 66-bit signed (two's complement)
+```
+
+### Type Inference
+
+Literal types are inferred from values:
+
+```kanagawa
+auto x = 10;     // uint4 (minimum width)
+auto y = 0xFFFF; // uint16
+```
+
+### Integer Operators
+
+Type widths grow to prevent overflow:
+
+```kanagawa
+uint8 a;
+uint8 b;
+auto sum = a + b;  // uint9
+auto product = a * b; // uint16
+```
+
+## Booleans
+
+```kanagawa
+bool flag = true;
+bool result = (x > 5) && flag;
+```
+
+## Enumerations
+
+```kanagawa
+enum State : uint2
+{
+    Idle,     // 0
+    Active,   // 1
+    Done      // 2
+}
+
+State current = State::Idle;
+```
+
+## Structures
+
+```kanagawa
+struct Packet
+{
+    uint16 header;
+    uint32 data;
+    uint8 checksum;
+}
+
+Packet pkt = {0x1234, 0xDEADBEEF, 0xFF};
+```
+
+## Related Topics
+
+<CardGroup cols={2}>
+<Card title="Syntax" href="/language/syntax">Language syntax</Card>
+<Card title="Functions" href="/language/functions">Function types</Card>
+</CardGroup>

@@ -1,0 +1,398 @@
+---
+title: Wavefront Threading
+description: Understanding Kanagawa's core execution model
+---
+
+## What is Wavefront Threading?
+
+Wavefront Threading is Kanagawa's execution model that makes concurrency explicit and deterministic. Unlike traditional threading models, wavefront threads execute in a predictable order, eliminating much of the synchronization burden while enabling efficient parallel hardware.
+
+<Note>
+Threads in Kanagawa are runtime constructs—the source code doesn't specify the number of threads created. They emerge naturally from the control flow of your program.
+</Note>
+
+## Thread Definition
+
+A thread in Kanagawa is defined by two properties:
+
+<CardGroup cols={2}>
+  <Card title="Context" icon="database">
+    The value of each local variable in the thread's scope
+  </Card>
+  <Card title="Location" icon="map-marker">
+    The next statement that the thread will execute
+  </Card>
+</CardGroup>
+
+In generated hardware, thread context is stored in pipeline registers or FIFOs, while thread locations correspond to specific pipeline stages.
+
+## How Threads Progress
+
+Threads physically progress through generated hardware in a way that mirrors how they logically progress through source code statements:
+
+```kanagawa
+class Processor
+{
+    uint32 Process(uint32 x)
+    {
+        uint32 y = x + 2;      // Pipeline Stage 1
+        uint32 z = y * 10;     // Pipeline Stage 2
+        return z / 4;          // Pipeline Stage 3
+    }
+}
+```
+
+At any moment, a specific thread exists in either:
+- A specific pipeline stage (actively executing)
+- A slot in a FIFO (waiting to execute)
+
+### Thread Movement Visualization
+
+```
+Clock 0:  [Thread 0] -> Stage 1
+Clock 1:  [Thread 1] -> Stage 1,  [Thread 0] -> Stage 2
+Clock 2:  [Thread 2] -> Stage 1,  [Thread 1] -> Stage 2,  [Thread 0] -> Stage 3
+Clock 3:  [Thread 3] -> Stage 1,  [Thread 2] -> Stage 2,  [Thread 1] -> Stage 3
+```
+
+## Thread Creation
+
+Threads are created implicitly through various language constructs:
+
+### Function Calls
+
+Each call to a non-inline function creates a thread:
+
+```kanagawa
+class Counter
+{
+    uint32 Process(uint32 x)
+    {
+        return x + 1;
+    }
+}
+
+inline void Run()
+{
+    static Counter _counter;
+    
+    // Each call creates a new thread
+    uint32 result1 = _counter.Process(10);  // Thread 1
+    uint32 result2 = _counter.Process(20);  // Thread 2
+}
+```
+
+### Pipelined Loops
+
+The `pipelined_for` construct creates multiple concurrent threads:
+
+```kanagawa
+inline void ProcessArray(uint32[8] data)
+{
+    // Creates 8 concurrent threads (tid 0-7)
+    pipelined_for(8, [data](uint32 tid)
+    {
+        uint32 result = data[tid] * 2;
+        println("{result}");
+    });
+}
+```
+
+### Async Execution
+
+The `async_exec` creates threads that run independently:
+
+```kanagawa
+inline void ParallelWork(uint32 x)
+{
+    uint32 y = x + 1;
+    
+    // Spawn asynchronous thread
+    async_exec([y]()
+    {
+        // This runs in parallel
+        uint32 z = y * 2;
+    });
+    
+    // Main thread continues immediately
+}
+```
+
+## Thread Ordering
+
+By default, Kanagawa maintains thread order. If Thread A enters a function before Thread B, then Thread A will exit before Thread B.
+
+### Ordered Execution
+
+```kanagawa
+class OrderedProcessor
+{
+    uint32 Process(uint32 x)
+    {
+        // Complex processing with variable latency
+        uint32 result = 0;
+        for (uint32 i = 0; i < x; i++)
+        {
+            result += i;
+        }
+        return result;
+    }
+}
+```
+
+Even though different inputs may take different amounts of time, results are returned in order.
+
+### Unordered Execution
+
+The `[[unordered]]` attribute allows threads to complete out of order:
+
+```kanagawa
+class UnorderedProcessor
+{
+    [[unordered]] uint32 Process(uint32 x)
+    {
+        uint32 result = 0;
+        [[unordered]] for (uint32 i = 0; i < x; i++)
+        {
+            result += i;
+        }
+        return result;
+    }
+}
+```
+
+<Warning>
+Unordered execution can improve throughput but requires careful handling of thread-dependent logic.
+</Warning>
+
+## Thread Synchronization
+
+Kanagawa provides several synchronization primitives:
+
+### Atomic Blocks
+
+Ensure exclusive access to shared state:
+
+```kanagawa
+class ThreadSafeCounter
+{
+private:
+    uint32 _count = 0;
+
+public:
+    uint32 Increment()
+    {
+        uint32 result;
+        
+        atomic
+        {
+            result = _count;
+            _count++;  // Only one thread at a time
+        }
+        
+        return result;
+    }
+}
+```
+
+### Scheduled Blocks
+
+Limit the number of concurrent threads in a block:
+
+```kanagawa
+inline void LimitedConcurrency(uint32 x)
+{
+    // At most 4 threads in this block simultaneously
+    [[schedule(4)]]
+    {
+        static memory<uint32, 16> _mem;
+        _mem[x] = x * 2;
+    }
+}
+```
+
+### Atomic Do Loops
+
+Wait until a condition is met:
+
+```kanagawa
+class Synchronizer
+{
+private:
+    bool _ready = false;
+
+public:
+    void WaitUntilReady()
+    {
+        // Block until ready flag is set
+        atomic do {} while (!_ready);
+    }
+    
+    void SetReady()
+    {
+        atomic { _ready = true; }
+    }
+}
+```
+
+## Hardware Mapping
+
+Wavefront threading maps cleanly to hardware:
+
+### Basic Blocks
+
+A basic block (sequence of statements with no branching) maps to a pipeline:
+
+```kanagawa
+inline uint32 SimpleCalculation(uint32 x)
+{
+    uint32 a = x + 5;      // Stage 1
+    uint32 b = a * 3;      // Stage 2
+    uint32 c = b - 2;      // Stage 3
+    return c;              // Stage 4
+}
+```
+
+### Branches
+
+Branches between basic blocks map to FIFOs:
+
+```kanagawa
+class ConditionalProcessor
+{
+    uint32 Process(uint32 x)
+    {
+        // Basic block 1 -> FIFO -> Basic block 2
+        uint32 y = compute_something(x);
+        
+        // Basic block 2 -> FIFO -> Basic block 3
+        return y + 10;
+    }
+    
+    uint32 compute_something(uint32 x)
+    {
+        return x * 2;
+    }
+}
+```
+
+### Multiple Threads in Flight
+
+Pipeline depth determines how many threads can be active simultaneously:
+
+```
+Pipeline:  [S1] -> [S2] -> [S3] -> [S4] -> [S5]
+Threads:   [T5]   [T4]   [T3]   [T2]   [T1]
+```
+
+Deeper pipelines = more threads in flight = higher throughput
+
+## Performance Implications
+
+### Thread Rate
+
+By default, functions have a peak throughput of 1 thread per clock cycle:
+
+```kanagawa
+class HighThroughput
+{
+    // Processes 1 input per cycle
+    uint32 Process(uint32 x)
+    {
+        return x + 1;
+    }
+}
+```
+
+You can explicitly limit thread rate to save area:
+
+```kanagawa
+class LowerThroughput
+{
+    // Processes 1 input every 4 cycles
+    [[thread_rate(4)]] uint32 Process(uint32 x)
+    {
+        return x + 1;
+    }
+}
+```
+
+### Initiation Interval
+
+The initiation interval (II) is the number of clock cycles between starting consecutive threads:
+
+- **II=1**: New thread every cycle (maximum throughput)
+- **II=N**: New thread every N cycles (reduced area, lower throughput)
+
+```kanagawa
+// II=1 (default)
+inline void HighII(uint32 x) { }
+
+// II=2 (explicit)
+[[thread_rate(2)]] inline void LowII(uint32 x) { }
+```
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="Minimize Thread Dependencies">
+    Avoid unnecessary synchronization between threads:
+    
+    ```kanagawa
+    // Good: No shared state
+    inline uint32 Independent(uint32 x)
+    {
+        return x * 2 + 5;
+    }
+    
+    // Requires synchronization
+    inline uint32 Dependent(uint32 x)
+    {
+        static uint32 _counter = 0;
+        atomic { _counter++; }
+        return x + _counter;
+    }
+    ```
+  </Accordion>
+  
+  <Accordion title="Use Inline Functions">
+    Inline functions don't create new threads:
+    
+    ```kanagawa
+    // Creates threads at each call site
+    uint32 NonInline(uint32 x) { return x + 1; }
+    
+    // No thread creation overhead
+    inline uint32 Inlined(uint32 x) { return x + 1; }
+    ```
+  </Accordion>
+  
+  <Accordion title="Consider Thread Rate">
+    Match thread rate to actual throughput needs:
+    
+    ```kanagawa
+    // If input arrives every 4 cycles
+    [[thread_rate(4)]] uint32 Process(uint32 x)
+    {
+        return expensive_operation(x);
+    }
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Related Concepts
+
+<CardGroup cols={2}>
+  <Card title="Memory Model" icon="memory" href="/concepts/memory-model">
+    Understand how threads interact with memory
+  </Card>
+  <Card title="Concurrency" icon="arrows-split-up-and-left" href="/concepts/concurrency">
+    Learn about parallel execution patterns
+  </Card>
+  <Card title="Hardware Mapping" icon="microchip" href="/concepts/mapping-to-hardware">
+    See how threads become hardware
+  </Card>
+  <Card title="Threads in Language" icon="code" href="/language/threads">
+    Detailed thread language features
+  </Card>
+</CardGroup>

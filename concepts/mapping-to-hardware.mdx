@@ -1,0 +1,498 @@
+---
+title: 'Mapping to Hardware'
+description: 'How Kanagawa code becomes hardware circuits'
+---
+
+## Overview
+
+Kanagawa compiles high-level code directly to RTL (Verilog). Understanding how language constructs map to hardware helps you write efficient designs and reason about area, timing, and throughput.
+
+## Basic Building Blocks
+
+### Pipelines and Basic Blocks
+
+A **basic block** is a sequence of statements with no branching. Each basic block maps to a **pipeline** in hardware:
+
+```kanagawa
+class SimpleProcessor
+{
+    uint32 Process(uint32 x)
+    {
+        uint32 a = x + 5;      // Pipeline Stage 1
+        uint32 b = a * 3;      // Pipeline Stage 2  
+        uint32 c = b - 2;      // Pipeline Stage 3
+        return c;              // Pipeline Stage 4
+    }
+}
+```
+
+**Hardware:**
+```
+[Input FIFO] -> [Stage 1: Add] -> [Stage 2: Multiply] -> [Stage 3: Subtract] -> [Output FIFO]
+```
+
+### FIFOs and Branches
+
+Branches between basic blocks become **FIFOs**:
+
+```kanagawa
+class BranchExample
+{
+    uint32 Process(uint32 x)
+    {
+        uint32 y = Helper(x);  // FIFO to Helper, FIFO back
+        return y + 1;
+    }
+    
+    uint32 Helper(uint32 x)
+    {
+        return x * 2;
+    }
+}
+```
+
+**Hardware:**
+```
+[Process Pipeline] -> [Call FIFO] -> [Helper Pipeline] -> [Return FIFO] -> [Process Pipeline]
+```
+
+## Control Flow Mapping
+
+### Conditionals (if/else)
+
+Map to **multiplexers**:
+
+```kanagawa
+uint32 x;
+bool condition;
+
+uint32 result = condition ? (x + 1) : (x * 2);
+```
+
+**Hardware:**
+```
+      x + 1
+       /
+MUX  <
+       \
+      x * 2
+```
+
+Kanagawa optimizes by only inserting muxes where needed:
+
+```kanagawa
+uint32 x, y;
+uint32 result = 10;
+
+if (x > y)
+{
+    uint32 temp = x + y;  // No mux needed for temp
+    result = temp * 2;    // Mux only for result
+}
+```
+
+### static for Loops
+
+**Unrolled** at compile time:
+
+```kanagawa
+uint32[4] input;
+uint32[4] output;
+
+static for (const auto i : 4)
+{
+    output[i] = input[i] * 2;
+}
+```
+
+**Hardware:** Four parallel multipliers
+```
+input[0] * 2 -> output[0]
+input[1] * 2 -> output[1]
+input[2] * 2 -> output[2]
+input[3] * 2 -> output[3]
+```
+
+With dependencies, creates a **pipeline chain**:
+
+```kanagawa
+uint32 sum = 0;
+static for (const auto i : 4)
+{
+    sum += data[i];
+}
+```
+
+**Hardware:** Sequential adder chain (deeper pipeline)
+
+### Sequential Loops (for/while)
+
+Create **loopback structures**:
+
+```kanagawa
+class SequentialLoop
+{
+    void Process()
+    {
+        uint32 i = 0;
+        
+        do
+        {
+            // Loop body
+            i++;
+        } while (i < 10);
+    }
+}
+```
+
+**Hardware:**
+```
+[Entry FIFO] -> MUX -> [Loop Body Pipeline] -> [Exit Reorder Buffer]
+                ^                |
+                |                v
+                +-- [Back FIFO] -+
+```
+
+Components:
+- **Entry FIFO**: New threads entering loop
+- **Back FIFO**: Threads continuing to next iteration
+- **MUX**: Arbitrates between entry and back (prioritizes back)
+- **Reorder Buffer**: Maintains thread order on exit
+
+### pipelined_for
+
+Creates **thread generation FSM**:
+
+```kanagawa
+pipelined_for(count, [](uint32 tid)
+{
+    // Loop body
+});
+```
+
+**Hardware:**
+```
+[Count + Captures FIFO] -> [Thread Gen FSM] -> [Body Pipeline]
+                                                      |
+                                                      v
+                           [Thread Collect FSM] <- [Result FIFO]
+                                    |
+                                    v
+                            [Continuation FIFO]
+```
+
+### async_exec
+
+Creates a **dataflow fork**:
+
+```kanagawa
+uint32 x;
+
+async_exec([x]()
+{
+    process(x);
+});
+```
+
+**Hardware:**
+```
+[Main Pipeline]
+      |
+      +-> [Async FIFO] -> [Async Pipeline]
+      |
+      +-> [Continuation]
+```
+
+## Data Structure Mapping
+
+### Arrays
+
+**Static indexing** (compile-time known): Direct wire access
+
+```kanagawa
+uint32[8] data;
+uint32 x = data[3];  // Just wires, no mux
+```
+
+**Dynamic indexing**: Multiplexer/Demultiplexer
+
+```kanagawa
+uint32[8] data;
+index_t<8> i;
+uint32 x = data[i];  // 8:1 mux
+```
+
+**Array write** with dynamic index:
+
+```kanagawa
+data[i] = value;
+
+// Equivalent to:
+static for (const auto j : 8)
+{
+    if (i == j) data[j] = value;
+}
+```
+
+### Memories
+
+Map to **physical memory blocks**:
+
+```kanagawa
+class MemoryExample
+{
+    memory<uint32, 256> mem;
+    
+    uint32 Read1(uint8 addr) { return mem[addr]; }  // Read port 1
+    uint32 Read2(uint8 addr) { return mem[addr]; }  // Read port 2
+    
+    void Write(uint8 addr, uint32 data)
+    {
+        mem[addr] = data;  // Write port
+    }
+}
+```
+
+**Hardware:** 2R1W memory with replication
+```
+[Write Port] -> [Write Arbiter] -> [Memory Replica 1] -> [Read Port 1]
+                                 |
+                                 +-> [Memory Replica 2] -> [Read Port 2]
+```
+
+**Non-replicated memory**:
+
+```kanagawa
+[[non_replicated]]
+memory<uint32, 256> mem;
+```
+
+**Hardware:** Single memory with read arbiter
+```
+[Read Port 1] -> [Read Arbiter] -> [Single Memory] <- [Write Arbiter] <- [Write Port]
+[Read Port 2] -/
+```
+
+### Structures
+
+Packed in **little-endian** format:
+
+```kanagawa
+struct Example
+{
+    uint8 x;   // Bits [7:0]
+    uint4 y;   // Bits [11:8]
+}
+```
+
+**Hardware:** 12-bit register
+
+## Synchronization Mapping
+
+### atomic Blocks
+
+Create **single-threaded execution regions**:
+
+```kanagawa
+atomic
+{
+    static uint32 counter = 0;
+    counter++;
+}
+```
+
+**Hardware:**
+- Entry FIFO queues threads
+- Atomic body executes one thread per cycle
+- Exit FIFO releases threads
+
+```
+[Threads] -> [Queue FIFO] -> [Atomic Pipeline] -> [Exit FIFO]
+                              (II=1, single thread)
+```
+
+### [[schedule(N)]] Blocks
+
+Limit concurrent threads with **token system**:
+
+```kanagawa
+[[schedule(4)]]
+{
+    // At most 4 threads here simultaneously
+}
+```
+
+**Hardware:**
+- Token pool with N tokens
+- Thread acquires token on entry, releases on exit
+- Blocking FIFO when no tokens available
+
+### atomic do Loops
+
+Blocking with **FSM and context FIFO**:
+
+```kanagawa
+atomic do {} while (condition);
+```
+
+**Hardware:**
+```
+[Context FIFO] -> [Condition Eval FSM] -> [Exit FIFO]
+                         |
+                         v (if condition true)
+                    [Back to FIFO]
+```
+
+## Function Call Mapping
+
+### Inline Functions
+
+**Inlined** into caller (no overhead):
+
+```kanagawa
+inline uint32 Add(uint32 a, uint32 b)
+{
+    return a + b;
+}
+
+uint32 result = Add(x, y);  // Becomes: result = x + y
+```
+
+### Non-Inline Functions
+
+Create **call/return structure**:
+
+```kanagawa
+class CallExample
+{
+    uint32 Caller(uint32 x)
+    {
+        uint32 a = x + 1;
+        uint32 b = Callee(a);  // Function call
+        return b + 2;
+    }
+    
+    uint32 Callee(uint32 y)
+    {
+        return y * 2;
+    }
+}
+```
+
+**Hardware:**
+```
+[Caller Pipeline] -> [Context Save FIFO] -> [Callee Pipeline]
+                                                   |
+                                                   v
+[Caller Pipeline] <- [Return FIFO] ---------------+
+```
+
+### Multiple Call Sites
+
+Create **arbiter for entry**:
+
+```kanagawa
+class MultiCall
+{
+    uint32 Shared(uint32 x) { return x * 2; }
+    
+    void Call1() { uint32 a = Shared(1); }  // Call site 1
+    void Call2() { uint32 b = Shared(2); }  // Call site 2
+}
+```
+
+**Hardware:**
+```
+[Call Site 1 FIFO] --\
+                      [Round-Robin Arbiter] -> [Shared Function]
+[Call Site 2 FIFO] --/
+```
+
+## Register and Pipeline Management
+
+### Register Ratios
+
+The `--register-ratio` compiler flag controls logic depth:
+
+- **Higher ratio**: Shorter logic paths, more registers, higher frequency
+- **Lower ratio**: Longer logic paths, fewer registers, lower area
+
+```
+Ratio 0.5: |Logic|Logic|Logic|Logic|   (few registers)
+Ratio 2.0: |L|R|L|R|L|R|L|R|           (many registers)
+```
+
+### Pipeline Stages
+
+Automatic pipeline insertion based on:
+1. Arithmetic operation complexity
+2. Register ratio target
+3. Timing constraints
+
+```kanagawa
+uint32 x, y;
+uint64 result = cast<uint64>(x) * cast<uint64>(y);  // May span multiple stages
+```
+
+## Optimization Opportunities
+
+### Constant Folding
+
+```kanagawa
+const auto SIZE = 16;
+const auto HALF = SIZE / 2;  // Computed at compile time
+```
+
+### Dead Code Elimination
+
+```kanagawa
+if (false)  // Branch eliminated
+{
+    expensive_operation();
+}
+```
+
+### Common Subexpression Elimination
+
+```kanagawa
+uint32 a = x + y;
+uint32 b = x + y;  // Compiler reuses x + y
+```
+
+### Loop Unrolling
+
+```kanagawa
+static for (const auto i : 4)  // Fully unrolled
+{
+    result[i] = data[i] * constant[i];
+}
+```
+
+## Resource Reports
+
+The compiler generates reports showing:
+- **Area**: LUTs, FFs, block RAMs, DSPs
+- **Basic blocks**: Each pipeline in design
+- **FIFOs**: Size and usage
+- **Memories**: Type and utilization
+
+<Note>
+Use resource reports to identify optimization opportunities and understand hardware implementation.
+</Note>
+
+## Related Topics
+
+<CardGroup cols={2}>
+  <Card title="Compiler Options" icon="sliders" href="/compiler/options">
+    Flags controlling hardware generation
+  </Card>
+  <Card title="Optimization" icon="gauge-high" href="/best-practices/optimization">
+    Techniques for efficient hardware
+  </Card>
+  <Card title="Code Generation" icon="microchip" href="/compiler/code-generation">
+    Understanding generated RTL
+  </Card>
+  <Card title="Debugging" icon="bug" href="/compiler/debugging">
+    Analyzing generated hardware
+  </Card>
+</CardGroup>

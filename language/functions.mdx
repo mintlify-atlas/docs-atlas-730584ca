@@ -1,0 +1,47 @@
+---
+title:'Functions'
+description:'Function declaration and usage'
+---
+
+## Function Declaration
+
+```kanagawa
+uint32 Add(uint32 a, uint32 b)
+{
+    return a + b;
+}
+```
+
+### Inline Functions
+
+```kanagawa
+inline uint32 FastAdd(uint32 a, uint32 b)
+{
+    return a + b;  // No call overhead
+}
+```
+
+## Templates
+
+```kanagawa
+template<typename T>
+inline T Max(T a, T b)
+{
+    return (a > b) ? a : b;
+}
+
+auto result = Max(10u32, 20u32);
+```
+
+## Function Types
+
+```kanagawa
+using Callback = (uint32, bool) -> uint8;
+```
+
+## Related Topics
+
+<CardGroup cols={2}>
+<Card title="Classes" href="/language/classes">Methods and callbacks</Card>
+<Card title="Templates" href="/language/syntax">Generic programming</Card>
+</CardGroup>

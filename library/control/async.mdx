@@ -1,0 +1,62 @@
+---
+title: Async Execution
+description: Asynchronous execution with fork-join patterns
+---
+
+The `control.async` module provides asynchronous execution patterns.
+
+## Functions
+
+### `async_exec(task)`
+
+Execute task asynchronously.
+
+```kanagawa
+async_exec([]() {
+    background_work();
+});
+```
+
+### `async_then(task, continuation)`
+
+Execute task then call continuation with result.
+
+```kanagawa
+async_then(
+    []() -> uint32 {
+        return compute();
+    },
+    [](uint32 result) {
+        process(result);
+    }
+);
+```
+
+## Async-Await Pattern
+
+```kanagawa
+async_await<uint32, 32, 32> aa;
+
+// Spawn async work
+aa.async([]() -> uint32 {
+    return expensive_computation();
+});
+
+// Wait for result
+auto result = aa.await();
+```
+
+## Fork-Join
+
+```kanagawa
+fork_join<uint32, 4, 32, 32> fj;
+
+fj.fork<0>([]() -> uint32 { return task_0(); });
+fj.fork<1>([]() -> uint32 { return task_1(); });
+
+auto results = fj.join({true, true, false, false});
+```
+
+## See Also
+
+- [Loops](/library/control/loops) - Iteration patterns

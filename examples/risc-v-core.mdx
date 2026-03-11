@@ -1,0 +1,498 @@
+---
+title: "RISC-V Processor Core"
+description: "Explore a complete 5-stage pipelined RISC-V processor implementation"
+---
+
+## Overview
+
+Kanagawa includes a production-quality RISC-V processor core implementing the RV32I base instruction set with optional M extension. This example explores the architecture and shows how to instantiate and configure the processor.
+
+## Quick Start
+
+The simplest way to use the RISC-V core:
+
+```kanagawa simple_riscv.k
+import processor.risc_v
+import base
+
+// Instantiate a single-hart RISC-V processor
+class SimpleRISCV
+{
+private:
+    const auto IMEM_SIZE = 0x1000;  // 4KB instruction memory
+    const auto DMEM_SIZE = 0x2000;  // 8KB data memory
+    
+    using processor_t = RISC_V<
+        1,              // Number of hardware threads (harts)
+        IMEM_SIZE,      // Instruction memory size
+        DMEM_SIZE       // Data memory size
+    >;
+    
+    processor_t _cpu;
+
+public:
+    void main()
+    {
+        // Initialize and start processor
+        uint32[1] pc = {0x80000000};  // Reset vector
+        _cpu.start(pc);
+    }
+}
+
+export SimpleRISCV;
+```
+
+## Architecture Overview
+
+The RISC-V core features:
+
+<CardGroup cols={2}>
+  <Card title="5-Stage Pipeline" icon="layer-group">
+    Fetch → Decode → Execute → Memory → Writeback
+  </Card>
+  
+  <Card title="Multi-Hart Support" icon="microchip">
+    1, 2, 4, or 8 hardware threads sharing core resources
+  </Card>
+  
+  <Card title="Dynamic Branch Prediction" icon="code-branch">
+    2-bit Branch Target Buffer for reduced misprediction penalty
+  </Card>
+  
+  <Card title="Memory Mapped I/O" icon="plug">
+    Extensible MMIO interface with callback handlers
+  </Card>
+</CardGroup>
+
+## Configuring the Processor
+
+<Steps>
+  <Step title="Choose number of hardware threads">
+    More harts improve throughput for parallel workloads:
+
+    ```kanagawa
+    // Single hart - best single-thread performance
+    using single_hart = RISC_V<1, IMEM_SIZE, DMEM_SIZE>;
+    
+    // Four harts - 1-cycle instruction execution
+    using quad_hart = RISC_V<4, IMEM_SIZE, DMEM_SIZE>;
+    
+    // Eight harts - maximum aggregate throughput
+    using octo_hart = RISC_V<8, IMEM_SIZE, DMEM_SIZE>;
+    ```
+
+    <Info>
+      Hart count must be a power of 2: 1, 2, 4, or 8
+    </Info>
+  </Step>
+
+  <Step title="Configure memory sizes">
+    Set instruction and data memory sizes in bytes:
+
+    ```kanagawa
+    const auto IMEM_LENGTH = 524288;  // 512KB instruction memory
+    const auto DMEM_LENGTH = 0x20000; // 128KB data memory per hart
+    
+    using processor_t = RISC_V<
+        2,                  // 2 harts
+        IMEM_LENGTH,
+        DMEM_LENGTH
+    >;
+    ```
+  </Step>
+
+  <Step title="Set memory map">
+    Configure address space layout:
+
+    ```kanagawa
+    const auto IMEM_ORIGIN = 0x80000000 >> 2;  // Word-aligned
+    const auto DMEM_ORIGIN = 0x80200000;
+    const auto MMIO_ORIGIN = 0x80220000;
+    const auto MMIO_LENGTH = 16;  // 16 bytes of MMIO space
+    
+    using processor_t = RISC_V<
+        1,
+        IMEM_LENGTH,
+        DMEM_LENGTH,
+        MMIO_LENGTH,
+        IMEM_ORIGIN,
+        DMEM_ORIGIN,
+        MMIO_ORIGIN
+    >;
+    ```
+  </Step>
+
+  <Step title="Enable extensions">
+    Add optional RISC-V extensions:
+
+    ```kanagawa
+    // Enable M extension (multiply/divide)
+    using processor_t = RISC_V<
+        1,
+        IMEM_LENGTH,
+        DMEM_LENGTH,
+        MMIO_LENGTH,
+        IMEM_ORIGIN,
+        DMEM_ORIGIN,
+        MMIO_ORIGIN,
+        IMEM_LENGTH,        // TCM size
+        memory_norep,       // Memory type
+        Extension::M        // Enable multiply extension
+    >;
+    ```
+
+    Available extensions:
+    - `Extension::None` - RV32I base only
+    - `Extension::M` - Integer multiply/divide
+  </Step>
+</Steps>
+
+## Complete Example with MMIO
+
+Here's a full processor wrapper with Memory Mapped I/O:
+
+```kanagawa riscv_wrapper.k
+import processor.risc_v
+import base
+
+template <
+    auto HARTS = 1,
+    auto EXTENSIONS = Extension::None
+>
+class risc_v_system
+{
+private:
+    const auto IMEM_ORIGIN = 0x80000000 >> 2;
+    const auto DMEM_ORIGIN = 0x80200000;
+    const auto IMEM_LENGTH = 524288;  // 512KB
+    const auto DMEM_LENGTH = 0x20000; // 128KB per hart
+    
+    const auto MMIO_ORIGIN = 0x80220000;
+    const auto MMIO_LENGTH = 16;
+    
+    // MMIO register addresses
+    const auto MMIO_STDOUT = MMIO_ORIGIN + 0;      // Character output
+    const auto MMIO_HID = MMIO_ORIGIN + 4;         // Hart ID
+    const auto MMIO_TRAP_MASK = MMIO_ORIGIN + 8;   // Trap mask
+    const auto MMIO_TRAP_CAPTURE = MMIO_ORIGIN + 12; // Trap status
+    
+    using processor_t = RISC_V<
+        HARTS,
+        IMEM_LENGTH,
+        DMEM_LENGTH,
+        MMIO_LENGTH,
+        IMEM_ORIGIN,
+        DMEM_ORIGIN,
+        MMIO_ORIGIN,
+        IMEM_LENGTH,
+        memory_norep,
+        EXTENSIONS,
+        Option::HartsShareDMEM
+    >;
+    
+    processor_t _processor;
+    bool _done = false;
+    uint8 _trap_mask = 0;
+    uint8 _trap_capture = 0;
+
+public:
+    using hart_index_t = processor_t::hart_index_t;
+    using imem_addr_t = processor_t::imem_addr_t;
+    using uint_t = processor_t::uint_t;
+    using int_t = processor_t::int_t;
+    
+    // Start the processor
+    void start(uint_t pc_offset)
+    {
+        uint_t[HARTS] pc;
+        static for (const auto i : HARTS)
+        {
+            pc[i] = pc_offset + (IMEM_ORIGIN << 2);
+        }
+        
+        _processor.start(pc);
+        
+        // Wait for completion
+        atomic do; while (!_done);
+    }
+    
+    // Write to instruction memory
+    [[no_backpressure]]
+    void write_imem(imem_addr_t addr, uint_t value)
+    {
+        _processor.imem_write(addr, value);
+    }
+
+private:
+    // MMIO load handler
+    inline optional<int_t> mmio_load(
+        hart_index_t hid,
+        uint_t addr,
+        MemorySize size,
+        bool sign
+    )
+    {
+        optional<int_t> result = {};
+        
+        if (addr == MMIO_HID)
+        {
+            // Return hardware thread ID
+            result.value = hid;
+            result.is_valid = true;
+        }
+        else if (addr == MMIO_TRAP_CAPTURE)
+        {
+            // Return and clear trap status
+            result.value = _trap_capture;
+            result.is_valid = true;
+            _trap_capture = 0;
+        }
+        else if (addr == MMIO_TRAP_MASK)
+        {
+            result.value = _trap_mask;
+            result.is_valid = true;
+        }
+        
+        return result;
+    }
+    
+    // MMIO store handler
+    inline bool mmio_store(
+        hart_index_t hid,
+        uint_t addr,
+        MemorySize size,
+        int_t value
+    )
+    {
+        if (addr == MMIO_STDOUT)
+        {
+            // Character output (only from hart 0)
+            if (hid == 0)
+            {
+                print("{}", static_cast<uint8>(value));
+            }
+        }
+        else if (addr == MMIO_TRAP_MASK)
+        {
+            _trap_mask = static_cast<uint8>(value);
+        }
+        
+        return true;
+    }
+    
+    // System trap handler
+    inline optional<imem_addr_t> system_trap(
+        hart_index_t hid,
+        Trap trap,
+        imem_addr_t pc
+    )
+    {
+        optional<imem_addr_t> result = make_optional(true, pc);
+        
+        if (trap == Trap::ECALL)
+        {
+            // ECALL terminates simulation
+            _done = true;
+        }
+        else
+        {
+            // Capture unexpected trap
+            uint8 trap_bit = (1 << trap);
+            bool is_masked = (0 != (_trap_mask & trap_bit));
+            
+            if (is_masked)
+            {
+                atomic {
+                    _trap_capture |= trap_bit;
+                    result.is_valid = false;  // Continue execution
+                }
+            }
+            else
+            {
+                print("TRAP: {}\n", trap);
+                assert(false);
+            }
+        }
+        
+        return result;
+    }
+    
+    // Initialize processor with callbacks
+    processor_t _processor = {
+        .system_trap = system_trap,
+        .mmio_store = mmio_store,
+        .mmio_load = mmio_load
+    };
+}
+
+export risc_v_system<1, Extension::M>;
+```
+
+## Performance Characteristics
+
+### Single Hart (1-hart configuration)
+
+| Instruction Type | Cycles |
+|-----------------|--------|
+| ALU operations | 1 |
+| Branch (predicted) | 1 |
+| Branch (mispredicted) | 4 |
+| Memory load | 2 |
+| MUL/MULH instructions | 5 |
+| ECALL/EBREAK | 1+ |
+
+### Dual Hart (2-hart configuration)
+
+| Instruction Type | Cycles |
+|-----------------|--------|
+| ALU operations | 1 |
+| Branch (predicted) | 1 |
+| Branch (mispredicted) | 3-4 |
+| Memory load | 1 |
+| MUL/MULH instructions | 4 |
+
+### Quad Hart (4-hart configuration)
+
+| Instruction Type | Cycles |
+|-----------------|--------|
+| All ALU operations | 1 |
+| Branch (predicted) | 1 |
+| Branch (mispredicted) | 2-3 |
+| Memory load | 1 |
+| MUL/MULH instructions | 1 |
+
+<Info>
+  IPC (Instructions Per Cycle) approaches the hart count for parallel workloads.
+</Info>
+
+## Extensibility
+
+<AccordionGroup>
+  <Accordion title="Custom Instructions">
+    Add custom instructions by providing a decode and execute callback:
+    
+    ```kanagawa
+    inline optional<uint_t> custom_decode(
+        uint_t instruction
+    )
+    {
+        // Decode custom instruction encoding
+        // Return opcode or empty if not custom instruction
+        optional<uint_t> result = {};
+        
+        if ((instruction & 0x7F) == 0x0B)  // Custom opcode
+        {
+            result.is_valid = true;
+            result.value = instruction >> 25;  // funct7
+        }
+        
+        return result;
+    }
+    
+    inline int_t custom_execute(
+        uint_t opcode,
+        int_t rs1,
+        int_t rs2
+    )
+    {
+        // Execute custom operation
+        return rs1 ^ rs2;  // Example: XOR operation
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="External Memory Interface">
+    Implement instruction fetching from external memory:
+    
+    ```kanagawa
+    [[async]]
+    (imem_addr_t addr) -> optional<uint_t> fetch_external;
+    
+    inline optional<uint_t> instruction_fetch(
+        imem_addr_t addr
+    )
+    {
+        if (addr >= EXTERNAL_MEM_START)
+        {
+            return fetch_external(addr);
+        }
+        else
+        {
+            return {}; // Use internal memory
+        }
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="Trace Interface">
+    Add dynamic instruction tracing:
+    
+    ```kanagawa
+    inline void trace(
+        hart_index_t hid,
+        imem_addr_t pc,
+        uint_t instruction,
+        Decoded decoded,
+        optional<int_t> result
+    )
+    {
+        print("[{}] PC=0x{:08x} INSTR=0x{:08x}\n",
+              hid, pc, instruction);
+    }
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Loading Programs
+
+To run software on the processor:
+
+<Steps>
+  <Step title="Compile RISC-V code">
+    ```bash
+    riscv32-unknown-elf-gcc -march=rv32i -mabi=ilp32 \
+      -nostdlib -T linker.ld program.c -o program.elf
+    ```
+  </Step>
+
+  <Step title="Extract binary">
+    ```bash
+    riscv32-unknown-elf-objcopy -O binary program.elf program.bin
+    ```
+  </Step>
+
+  <Step title="Load into simulation">
+    ```kanagawa
+    // Load program into instruction memory
+    void load_program(uint32[] binary_data)
+    {
+        static for (const auto i : binary_data.length)
+        {
+            _cpu.write_imem(i, binary_data[i]);
+        }
+    }
+    ```
+  </Step>
+</Steps>
+
+## Resource Usage
+
+<CardGroup cols={2}>
+  <Card title="Single Hart" icon="microchip">
+    - ~5K LUTs
+    - 4-8 BRAMs
+    - 2-5 DSPs (with M extension)
+  </Card>
+  
+  <Card title="Quad Hart" icon="microchip">
+    - ~12K LUTs
+    - 12-16 BRAMs
+    - 8-12 DSPs (with M extension)
+  </Card>
+</CardGroup>
+
+## Next Steps
+
+<Card title="Cryptographic Accelerator" icon="lock" href="/examples/cryptographic-accelerator">
+  Build a custom AES encryption accelerator
+</Card>

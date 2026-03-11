@@ -1,0 +1,74 @@
+---
+title: Atomic Operations
+description: Atomic operations on shared state
+---
+
+The `sync.atomic` module provides atomic operations for managing shared state across concurrent threads.
+
+## Overview
+
+```kanagawa
+import sync.atomic
+
+// Atomically increment counter
+auto [old_val, new_val] = atomically<uint32>([](uint32 prev) {
+    return prev + 1;
+});
+```
+
+## Functions
+
+### `atomically<T>(modify_fn)`
+
+Atomically apply function to internal state.
+
+```kanagawa
+inline pair<T, T> atomically((T) -> T modify)
+```
+
+Each call site maintains independent state.
+
+**Example:**
+```kanagawa
+// Thread-safe counter
+void increment() {
+    auto result = atomically<uint32>([](uint32 count) {
+        return count + 1;
+    });
+    // result.first: old value
+    // result.second: new value
+}
+```
+
+### `atomically_one_of<N, T>(index, modify_fn)`
+
+Interleave updates among N independent states.
+
+```kanagawa
+inline pair<T, T> atomically_one_of(index_t<N> i, (T) -> T modify)
+```
+
+**Example:**
+```kanagawa
+// Per-core counters
+void increment_core(index_t<4> core_id) {
+    auto result = atomically_one_of<4, uint32>(
+        core_id,
+        [](uint32 count) { return count + 1; }
+    );
+}
+```
+
+### `first(pair)` / `second(pair)`
+
+Extract old/new values from atomic result.
+
+```kanagawa
+auto result = atomically<uint32>(increment);
+auto old_value = first(result);
+auto new_value = second(result);
+```
+
+## See Also
+
+- [Locks](/library/sync/locks) - Mutual exclusion primitives

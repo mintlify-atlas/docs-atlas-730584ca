@@ -1,0 +1,67 @@
+---
+title: Debugging
+description: Debugging Kanagawa designs
+---
+
+## Simulation
+
+Run generated C++ simulation:
+
+```bash
+# Build tests
+ninja library_tests
+
+# Run specific test
+ctest --verbose -R "^library\\.counter"
+```
+
+## Assertions
+
+```kanagawa
+inline void SafeDivide(uint32 a, uint32 b)
+{
+    assert(b != 0);  // Runtime check in simulation
+    return a / b;
+}
+```
+
+## Debug Output
+
+```kanagawa
+inline void Debug(uint32 value)
+{
+    println("Value: {value:x}");
+}
+```
+
+## Waveform Analysis
+
+Generate VCD files:
+
+```bash
+kanagawa --trace=vcd design.k
+verilator --trace design.v
+```
+
+## Common Issues
+
+### Narrowing Warnings
+
+```kanagawa
+// Warning
+uint32 x = a + b;  // uint33 -> uint32
+
+// Fixed
+auto x = cast<uint32>(a + b);
+```
+
+### Data Races
+
+Use `--check-narrowing-assignment` to detect issues
+
+## Related Topics
+
+<CardGroup cols={2}>
+<Card title="Code Generation" href="/compiler/code-generation">Generated RTL</Card>
+<Card title="Testing" href="/resources/testing">Running tests</Card>
+</CardGroup>

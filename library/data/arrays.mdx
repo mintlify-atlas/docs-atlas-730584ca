@@ -1,0 +1,391 @@
+---
+title: Arrays
+description: Fixed-size array operations and transformations
+---
+
+The `data.array` module provides operations on fixed-size arrays with hardware-optimized implementations. All operations are designed for parallel execution in hardware.
+
+## Overview
+
+Arrays in Kanagawa are fixed-size, statically-typed collections. The `data.array` module provides functional operations that compile to efficient hardware implementations, often using parallel tree structures or combinational logic.
+
+```kanagawa
+import data.array as A
+
+// Create an array
+uint8[4] values = {1, 2, 3, 4};
+
+// Sum elements using parallel reduction
+auto total = A::sum<uint16>(values); // 10
+
+// Map function over elements
+auto doubled = A::map([](uint8 x){ return x * 2; }, values);
+```
+
+## Type Definitions
+
+<ParamField path="array<T, N>" type="T[N]">
+  Array type alias for fixed-size array of N elements of type T.
+</ParamField>
+
+## Construction
+
+### `indices<N>()`
+
+Returns an array where each element equals its index.
+
+```kanagawa
+auto idx = indices<4>(); // {0, 1, 2, 3}
+```
+
+<ParamField path="N" type="auto">
+  Array length
+</ParamField>
+
+<ParamField path="T" type="typename" default="index_t<N>">
+  Element type
+</ParamField>
+
+### `repeat<N>(value)`
+
+Constructs an array with all elements equal to the same value.
+
+```kanagawa
+auto zeros = repeat<4>(0); // {0, 0, 0, 0}
+```
+
+### `singleton(value)`
+
+Constructs a single-element array.
+
+```kanagawa
+auto single = singleton(42); // {42}
+```
+
+### `iterate<N>(f, x)`
+
+Returns array of repeated applications of function to initial value.
+
+```kanagawa
+auto powers = iterate<4>([](uint32 x){ return x * 2; }, 1);
+// {1, 2, 4, 8}
+```
+
+## Element Access
+
+### `at(arr, i)`
+
+Access element at index i. Equivalent to `arr[i]` with bounds checking.
+
+```kanagawa
+auto elem = at({10, 20, 30}, 1); // 20
+```
+
+### `front(arr)`
+
+Returns the first element. Equivalent to `arr[0]`.
+
+### `back(arr)`
+
+Returns the last element. Equivalent to `arr[N-1]`.
+
+## Transformations
+
+### `map(f, arr)`
+
+Apply function to each element, returning new array.
+
+```kanagawa
+auto result = map([](uint8 x){ return x + 1; }, {1, 2, 3});
+// {2, 3, 4}
+```
+
+**Hardware Implementation:** Instantiates N copies of function f in parallel.
+
+<ParamField path="f" type="(T) -> R">
+  Function to apply to each element
+</ParamField>
+
+<ParamField path="arr" type="T[N]">
+  Input array
+</ParamField>
+
+### `map_indices<N>(f)`
+
+Map array indices to result values.
+
+```kanagawa
+auto squares = map_indices<4>([](index_t<4> i){ return i * i; });
+// {0, 1, 4, 9}
+```
+
+### `transpose(arr)`
+
+Transpose rows and columns in 2D array.
+
+```kanagawa
+uint8[2][3] src = {{1, 2, 3}, {4, 5, 6}};
+auto result = transpose(src); // {{1, 4}, {2, 5}, {3, 6}}
+```
+
+### Array Manipulation
+
+<Tabs>
+  <Tab title="Slicing">
+    ```kanagawa
+    // Take first M elements
+    auto first3 = take<3>({0, 1, 2, 3, 4}); // {0, 1, 2}
+    
+    // Drop first M elements
+    auto rest = drop<2>({0, 1, 2, 3, 4}); // {2, 3, 4}
+    
+    // All but first
+    auto t = tail({0, 1, 2, 3, 4}); // {1, 2, 3, 4}
+    
+    // All but last
+    auto i = init({0, 1, 2, 3, 4}); // {0, 1, 2, 3}
+    ```
+  </Tab>
+  <Tab title="Rotation">
+    ```kanagawa
+    // Rotate right
+    auto r = rotate_array_right<4>({0, 1, 2, 3, 4}, 2);
+    // {2, 3, 4, 0}
+    
+    // Rotate left
+    auto l = rotate_array_left<4>({0, 1, 2, 3, 4}, 2);
+    // {3, 4, 0, 1}
+    ```
+  </Tab>
+  <Tab title="Shifting">
+    ```kanagawa
+    // Shift right (fills with zeros)
+    auto sr = shift_array_right<4>({0, 1, 2, 3, 4}, 2);
+    // {2, 3, 4, 0}
+    
+    // Shift left (fills with zeros)
+    auto sl = shift_array_left<4>({0, 1, 2, 3, 4}, 2);
+    // {0, 0, 0, 1}
+    ```
+  </Tab>
+</Tabs>
+
+### `intersperse(separator, arr)`
+
+Insert separator value between array elements.
+
+```kanagawa
+auto result = intersperse(-1, {0, 1, 2});
+// {0, -1, 1, -1, 2}
+```
+
+## Reductions
+
+### `reduce(f, arr)`
+
+Implement binary reducer tree using associative function.
+
+```kanagawa
+auto sum = reduce(add, {1, 2, 3, 4}); // 10
+```
+
+**Hardware Implementation:** Parallel binary tree structure with log(N) depth.
+
+<ParamField path="f" type="(T, T) -> T">
+  Associative binary function
+</ParamField>
+
+### `foldr(f, arr)` / `foldl(f, arr)`
+
+Right/left-associative fold. Use `reduce` when f is associative for better performance.
+
+```kanagawa
+// foldr(f, {0, 1, 2, 3}) == f(0, f(1, f(2, 3)))
+// foldl(f, {0, 1, 2, 3}) == f(3, f(2, f(1, 0)))
+```
+
+### Common Reductions
+
+<CodeGroup>
+```kanagawa Logical
+auto all_true = and({true, true, false}); // false
+auto any_true = or({true, false, false}); // true
+
+auto all_even = all([](uint8 x){ return x % 2 == 0; }, {2, 4, 6}); // true
+auto any_odd = any([](uint8 x){ return x % 2 == 1; }, {2, 4, 5}); // true
+```
+
+```kanagawa Arithmetic
+auto total = sum<uint16>({0xFF, 0x2F, 0x5E}); // 0x18C
+auto min_val = minimum({5, 3, 87, 22}); // 3
+auto max_val = maximum({5, 3, 87, 22}); // 87
+```
+
+```kanagawa Optionals
+optional<uint8>[3] opts = {{true, 1}, {false, 0}, {true, 3}};
+auto first = first_valid(opts); // {true, 1}
+auto last = last_valid(opts); // {true, 3}
+```
+</CodeGroup>
+
+### `map_reduce(map_fn, reduce_fn, arr)`
+
+Map elements then reduce. More efficient than separate map and reduce.
+
+```kanagawa
+auto all_even = map_reduce(
+    [](uint8 a){ return a % 2 == 0; },
+    [](bool x, bool y){ return x && y; },
+    {2, 4, 6}
+); // true
+```
+
+## Scans
+
+### `inclusive_scan(arr, f)`
+
+Compute inclusive scan with associative function.
+
+```kanagawa
+auto scan = inclusive_scan<uint8>({1, 2, 3}, add);
+// {1, 3, 6}
+```
+
+**Hardware Implementation:** Parallel prefix network with log(N) depth.
+
+### `prefix_sum(arr)`
+
+Compute prefix sum (cumulative sum).
+
+```kanagawa
+auto sums = prefix_sum<uint8>({0, 1, 2, 3});
+// {0, 1, 3, 6}
+```
+
+## Zipping and Unzipping
+
+### `zip_with(f, arr1, arr2)`
+
+Combine two arrays element-wise using function.
+
+```kanagawa
+auto sums = zip_with(add, {1, 2, 3}, {4, 5, 6});
+// {5, 7, 9}
+```
+
+### `zip(arr1, arr2)`
+
+Combine two arrays into array of pairs.
+
+```kanagawa
+auto pairs = zip({true, false}, {1, 2});
+// {{true, 1}, {false, 2}}
+```
+
+### `unzip_with(f, arr)` / `unzip(arr)`
+
+Split array of pairs into pair of arrays.
+
+```kanagawa
+auto arrays = unzip<uint8, bool>({{1, true}, {2, false}});
+// {{1, 2}, {true, false}}
+```
+
+## Sorting
+
+### `bitonic_sort(arr, cmp)`
+
+Bitonic sorting network. Array size must be power of 2.
+
+```kanagawa
+auto sorted = bitonic_sort({4, 2, 3, 1}, less_than<uint32>);
+// {1, 2, 3, 4}
+```
+
+**Hardware Implementation:** Combinational sorting network with O(log²N) depth.
+
+### `partial_sort<N>(x, cmp, is_last)`
+
+Extract N smallest/largest elements from stream.
+
+```kanagawa
+const auto N = 6;
+uint8[N] input = {5, 1, 3, 2, 7, 3};
+auto sorted = pipelined_last(N, [input, N](index_t<N> tid) {
+    return partial_sort<6>(input[tid], less_than<uint8>, tid == N - 1);
+});
+// {{true, 1}, {true, 2}, {true, 3}, {true, 3}, {true, 5}, {true, 7}}
+```
+
+## Comparison
+
+### `equal_by(equality_fn, arr1, arr2)`
+
+Element-wise equality using custom comparison.
+
+```kanagawa
+auto eq = equal_by(
+    optional::equal<uint8>,
+    {{true, 0xFF}, {false, 0xFF}},
+    {{true, 0xFF}, {false, 0x00}}
+); // true (compares only valid values)
+```
+
+### `equal(arr1, arr2)`
+
+Element-wise equality using `==` operator.
+
+```kanagawa
+auto eq = equal({0x22, 0x1E}, {0x22, 0x1E}); // true
+```
+
+## Deduplication
+
+### `unique_by(equality_fn, arr)`
+
+Remove duplicates using custom equality.
+
+```kanagawa
+auto result = unique_by(order::equal<uint32>, {0, 1, 0});
+// {{true, 0}, {true, 1}, {false, 0}}
+```
+
+### `unique(arr)`
+
+Remove duplicates using `==` operator.
+
+```kanagawa
+auto result = unique({0, 1, 0});
+// {{true, 0}, {true, 1}, {false, 0}}
+```
+
+## Utilities
+
+### `copy_array(source, s_first, destination, d_first, count)`
+
+Copy elements from source to destination array.
+
+```kanagawa
+auto result = copy_array(
+    {1, 2, 3, 4}, 1,  // source array, start at index 1
+    {0xFF, 0xFF, 0xFF}, 0,  // dest array, start at index 0
+    2  // copy 2 elements
+); // {2, 3, 0xFF}
+```
+
+## Performance Considerations
+
+<Note>
+**Hardware Efficiency**
+
+- **Parallel Operations**: Functions like `map`, `reduce`, and `scan` generate parallel hardware
+- **Tree Structures**: Reductions use binary trees with O(log N) depth
+- **Combinational Logic**: Many operations compile to pure combinational logic
+- **Resource Usage**: Operations that instantiate hardware per element scale with array size
+</Note>
+
+## See Also
+
+- [Vectors](/library/data/vectors) - Variable-length arrays
+- [Control Flow](/library/control/loops) - Iteration patterns
+- [Numeric Types](/library/numeric/integers) - Numeric operations

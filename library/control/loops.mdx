@@ -1,0 +1,65 @@
+---
+title: Loops
+description: Pipelined and parallel iteration constructs
+---
+
+The `control.loop` module provides hardware-optimized looping constructs that synthesize to efficient FSMs and parallel hardware.
+
+## Pipelined Loops
+
+### `pipelined_for(count, body)`
+
+Spawn threads executing body in a pipeline.
+
+```kanagawa
+pipelined_for(10, [](index_t<10> i) {
+    process(i);
+});
+```
+
+### `pipelined_map<N>(count, body)`
+
+Returns array of results from pipelined execution.
+
+```kanagawa
+auto results = pipelined_map<10>(10, [](index_t<10> i) -> uint32 {
+    return compute(i);
+});
+```
+
+### `pipelined_last(count, body)`
+
+Returns result from last iteration only.
+
+```kanagawa
+auto final = pipelined_last(10, [](index_t<10> i) -> uint32 {
+    return accumulate(i);
+});
+```
+
+## Parallel Loops
+
+### `parallel_for<N>(count, body)`
+
+Execute across N hardware instances in parallel.
+
+```kanagawa
+parallel_for<4>(4, [](index_t<4> i) {
+    process_parallel(i);
+});
+```
+
+### `parallel_map<N, T>(count, body)`
+
+Parallel execution returning array of results.
+
+```kanagawa
+auto results = parallel_map<4, uint32>(4, [](index_t<4> i) -> uint32 {
+    return compute(i);
+});
+```
+
+## See Also
+
+- [Async](/library/control/async) - Asynchronous execution
+- [FSM](/library/control/fsm) - State machine helpers

@@ -1,0 +1,227 @@
+---
+title: Building Kanagawa
+description: Learn how to build the Kanagawa compiler from source and set up your development environment
+---
+
+If you want to contribute to Kanagawa or experiment with changes, you'll need to set up a build environment. This guide covers the steps to build the compiler and run unit tests.
+
+## Platform Support
+
+The full Kanagawa build and test environment is supported on:
+- **Linux** (or Linux in WSL on Windows)
+- **macOS** - Compiler and tools building, most unit tests (except RISC-V cross-compiler tests)
+- **Windows** - Compiler and tools building only
+
+The CI checks run on Ubuntu 24, Windows 2019, and macOS. Unit tests are only run on Ubuntu 24.
+
+## Prerequisites
+
+### All Platforms
+
+The following tools are needed to build the Kanagawa compiler:
+
+- **CMake** version 3.30 or later - [Download](https://cmake.org/)
+- **Ninja** (recommended) - [Download](https://ninja-build.org/)
+- **ghcup** (Haskell 9.6.7 and cabal 3.12.1.0) - [Install](https://www.haskell.org/ghcup/install/)
+  - Run `cabal update` after installing ghc and cabal
+- **Boost C++ library** version 1.88.0 or later - [Download](https://www.boost.org/)
+- **Python** version 3.x
+
+### Linux-Specific
+
+- **GCC** 11.4.0 or later
+- **Verilator** version 5.040 - [Install Guide](https://veripool.org/guide/latest/install.html#git-quick-install)
+
+### Optional Tools
+
+For RISC-V processor tests:
+- **RISC-V toolchain** - [xPack RISC-V embedded toolchain v15.2.0-1](https://github.com/xpack-dev-tools/riscv-none-elf-gcc-xpack/releases/download/v15.2.0-1/xpack-riscv-none-elf-gcc-15.2.0-1-linux-x64.tar.gz)
+
+For building Sandcastle documentation:
+- **Rust cargo** version 1.88.0 or later - [Install](https://doc.rust-lang.org/cargo/getting-started/installation.html)
+- **svgbob_cli** - Install via `cargo install svgbob_cli`
+- **Node.js** version 16.20.2 or later - [Install](https://github.com/nodesource/distributions)
+- **Yarn** version 1.22.22 or later - [Install](https://classic.yarnpkg.com/en/docs/install#linux-stable)
+
+## Building the Compiler
+
+<Steps>
+  <Step title="Clone the repository">
+    ```bash
+    git clone https://github.com/microsoft/kanagawa.git
+    cd kanagawa
+    ```
+  </Step>
+
+  <Step title="Initialize git submodules">
+    ```bash
+    git submodule update --init --recursive
+    ```
+  </Step>
+
+  <Step title="Create build directory">
+    ```bash
+    mkdir ../kanagawa-build
+    cd ../kanagawa-build
+    ```
+  </Step>
+
+  <Step title="Configure the build">
+    <Tabs>
+      <Tab title="Linux">
+        ```bash
+        cmake \
+            -S $HOME/kanagawa \
+            -B $HOME/kanagawa-build \
+            -G Ninja \
+            -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+            -DBoost_DIR=$HOME/boost/lib/cmake/Boost-1.88.0 \
+            -DGHCUP_DIR=$HOME/.ghcup/bin \
+            -DVERILATOR_EXE=/usr/local/bin/verilator \
+            -DRISCV64_GCC=$HOME/riscv64-unknown-elf-gcc/riscv64-unknown-elf-gcc-10.1.0-2020.08.2-x86_64-linux-ubuntu14
+        ```
+
+        If Boost was installed via an OS package:
+        ```bash
+        -DCMAKE_PREFIX_PATH=/usr/lib/x86_64-linux-gnu/cmake
+        ```
+
+        For memory-constrained environments (WSL):
+        ```bash
+        -DKANAGAWA_HEAVY_PARALLEL_JOBS=2
+        ```
+      </Tab>
+
+      <Tab title="macOS">
+        ```zsh
+        cmake \
+            -S $HOME/kanagawa \
+            -B $HOME/kanagawa-build \
+            -G Ninja \
+            -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+            -DBoost_DIR=/opt/homebrew/opt/boost/lib/cmake \
+            -DGHCUP_DIR=$HOME/.ghcup/bin \
+            -DVERILATOR_EXE=/opt/homebrew/bin/verilator \
+            -DRISCV64_GCC=/opt/homebrew/Cellar/riscv-gnu-toolchain/main
+        ```
+      </Tab>
+
+      <Tab title="Windows">
+        ```powershell
+        cmake -S kanagawa -B kanagawa-build -G Ninja -DCMAKE_BUILD_TYPE=RelWithDebInfo -DCMAKE_PREFIX_PATH=D:\boost.1.88.0\lib\cmake -DGHCUP_DIR=D:/ghcup
+        ```
+      </Tab>
+    </Tabs>
+  </Step>
+
+  <Step title="Build the compiler">
+    ```bash
+    # Build Kanagawa runtime
+    ninja -j $(nproc) kanagawa_runtime
+
+    # Build the library tests
+    ninja -j $(nproc) library_tests
+    ```
+  </Step>
+</Steps>
+
+## Platform-Specific Setup
+
+<Tabs>
+  <Tab title="Linux">
+    Install the required dependencies using your package manager, then follow the build steps above.
+
+    For WSL environments with limited memory, use the `-DKANAGAWA_HEAVY_PARALLEL_JOBS=2` option and `-j2` with ninja/ctest.
+  </Tab>
+
+  <Tab title="macOS">
+    <Steps>
+      <Step title="Install Homebrew">
+        If not already installed:
+        ```zsh
+        /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+        ```
+      </Step>
+
+      <Step title="Install build dependencies">
+        ```zsh
+        brew install cmake ninja boost verilator
+        curl --proto '=https' --tlsv1.2 -sSf https://get-ghcup.haskell.org | sh
+        ```
+      </Step>
+
+      <Step title="Install Sandcastle dependencies (optional)">
+        ```zsh
+        brew install nodejs yarn pandoc
+        curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+        cargo install svgbob_cli
+        ```
+      </Step>
+
+      <Step title="Install RISC-V toolchain (optional)">
+        ```zsh
+        brew tap riscv-software-src/riscv
+        brew install riscv-tools
+        ```
+
+        Or download the darwin-arm64 release from [xPack RISC-V GCC v15.2.0-1](https://github.com/xpack-dev-tools/riscv-none-elf-gcc-xpack/releases/tag/v15.2.0-1/)
+      </Step>
+    </Steps>
+  </Tab>
+
+  <Tab title="Windows">
+    <Note>
+      Unit tests are only supported on Linux. You can build and run the compiler on Windows.
+    </Note>
+
+    <Steps>
+      <Step title="Install C/C++ compiler">
+        Visual Studio 2022 Community Edition is recommended. CMake should auto-detect it.
+      </Step>
+
+      <Step title="Install CMake and Ninja">
+        - [CMake 3.30 or later](https://cmake.org/)
+        - [Ninja build system](https://ninja-build.org/)
+      </Step>
+
+      <Step title="Install ghcup">
+        1. Install [ghcup for Windows](https://www.haskell.org/ghcup/)
+        2. Close and re-open PowerShell
+        3. Run `ghcup tui` to launch the interactive installer
+        4. Install Haskell 9.6.7 and cabal 3.12.1.0
+        5. Run `cabal update`
+      </Step>
+
+      <Step title="Install Boost">
+        1. Download [Boost 1.88.0 or later](https://www.boost.org/)
+        2. Extract the archive
+        3. Open PowerShell in the extracted directory
+        4. Run:
+           ```powershell
+           .\bootstrap.bat
+           .\b2.exe install --prefix=target_directory
+           ```
+        5. Add to CMake: `-DCMAKE_PREFIX_PATH=<boost-install-dir>\lib\cmake`
+      </Step>
+    </Steps>
+  </Tab>
+</Tabs>
+
+## Memory Considerations
+
+In WSL or memory-constrained environments:
+
+- Use `-DKANAGAWA_HEAVY_PARALLEL_JOBS=2` in CMake configuration
+- Limit parallel jobs with `-j2` option to ninja or ctest
+- Processes will fail if total memory footprint exceeds available memory and swap space
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Running Tests" icon="flask" href="/resources/testing">
+    Learn how to run the unit test suite
+  </Card>
+  <Card title="Contributing" icon="code-pull-request" href="/resources/contributing">
+    Contribute to the Kanagawa project
+  </Card>
+</CardGroup>

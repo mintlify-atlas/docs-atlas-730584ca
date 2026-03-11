@@ -1,0 +1,42 @@
+---
+title: Intel FPGA Support
+description: Configuration for Intel FPGA devices
+---
+
+The `intel.config` module provides device configuration for Intel FPGAs.
+
+## Overview
+
+```kanagawa
+import intel.config
+
+// Configuration is automatically applied
+// when intel.config is imported
+```
+
+## Supported Devices
+
+- Intel Agilex 7
+- Intel Stratix 10
+- Intel Arria 10
+
+## Configuration
+
+The module sets Intel-specific defaults:
+
+- **Vendor**: Intel
+- **Memory Init Format**: MIF (Memory Initialization File)
+- **Quad-Port RAM**: Supported
+- **Array Cost Factors**: Tuned for Intel architecture
+
+## Device-Specific Modules
+
+```kanagawa
+import intel.agilex-7.config      // Agilex 7
+import intel.stratix-10.config    // Stratix 10
+import intel.arria-10.config      // Arria 10
+```
+
+## See Also
+
+- [Xilinx Devices](/library/ip/xilinx-devices) - Xilinx FPGA support

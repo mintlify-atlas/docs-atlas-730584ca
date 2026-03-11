@@ -1,0 +1,387 @@
+---
+title: Buffers
+description: Shift registers and data staging buffers
+---
+
+The `data.buffer` module provides shift register implementations for staging and transforming data streams. Buffers are useful for serialization, deserialization, and creating taps into data streams.
+
+## Overview
+
+Buffers in Kanagawa implement shift register functionality, allowing serial-in/parallel-out operations that are essential for:
+
+- Data serialization and deserialization
+- Creating delay lines
+- Tap extraction from data streams
+- Gearbox operations (width conversion)
+
+```kanagawa
+import data.buffer
+
+// Serial input, parallel output shift register
+auto result = serial_in_parallel_out<4, uint8>(0x42);
+// result.first:  previous register contents
+// result.second: new register contents after shift
+```
+
+## Serial-In Parallel-Out
+
+### Function Signature
+
+```kanagawa
+template<
+    auto N,                 // Length of shift register
+    typename T,             // Type of each entry
+    bool Initialize = true  // Initialize state to {}
+>
+inline pair<T[N], T[N]> serial_in_parallel_out(T data)
+```
+
+<ParamField path="N" type="auto">
+  Length of shift register (number of stages)
+</ParamField>
+
+<ParamField path="T" type="typename">
+  Type of each buffer entry
+</ParamField>
+
+<ParamField path="Initialize" type="bool" default="true">
+  If `true`, initial state is zero-initialized. If `false`, state is undefined at startup.
+</ParamField>
+
+<ParamField path="data" type="T">
+  Value to shift in at the most-significant end (index N-1)
+</ParamField>
+
+### Return Value
+
+<ResponseField name="first" type="T[N]">
+  Register contents **before** shifting
+</ResponseField>
+
+<ResponseField name="second" type="T[N]">
+  Register contents **after** shifting
+</ResponseField>
+
+### Operation
+
+The function implements a right-shift register:
+1. Returns current register contents
+2. Shifts all elements one position to the left (toward index 0)
+3. Inserts new data at the rightmost position (index N-1)
+4. Returns new register contents
+
+```
+Before:  [A, B, C, D]  ← shift in X
+                ↑
+              drops
+
+After:   [B, C, D, X]
+```
+
+## Usage Examples
+
+### Basic Shift Register
+
+```kanagawa
+// 4-stage shift register
+template<typename T>
+class ShiftRegister {
+    void shift(T input) {
+        auto [old_state, new_state] = 
+            serial_in_parallel_out<4, T>(input);
+        
+        // old_state: register before shift
+        // new_state: register after shift
+    }
+}
+```
+
+### Delay Line
+
+<Tabs>
+  <Tab title="Fixed Delay">
+    ```kanagawa
+    // Create 8-cycle delay
+    class DelayLine {
+        uint32 delay(uint32 input) {
+            auto [prev, curr] = 
+                serial_in_parallel_out<8, uint32>(input);
+            
+            // Output is value that was input 8 cycles ago
+            return prev[0];
+        }
+    }
+    ```
+  </Tab>
+  
+  <Tab title="Variable Delay">
+    ```kanagawa
+    // Variable delay tap
+    class VariableDelay {
+        uint32 delay(uint32 input, index_t<8> tap_pos) {
+            auto [prev, curr] = 
+                serial_in_parallel_out<8, uint32>(input);
+            
+            // Select from different delay taps
+            return prev[tap_pos];
+        }
+    }
+    ```
+  </Tab>
+  
+  <Tab title="Multi-Tap">
+    ```kanagawa
+    // FIR filter with shift register
+    class FIRFilter {
+        const auto TAPS = 8;
+        fixed<16, 16>[TAPS] coefficients;
+        
+        fixed<16, 16> filter(fixed<16, 16> input) {
+            auto [samples, _] = 
+                serial_in_parallel_out<TAPS>(input);
+            
+            // Multiply-accumulate across taps
+            fixed<16, 16> sum = {};
+            static for (const auto i : TAPS) {
+                sum.value += samples[i].value * coefficients[i].value;
+            }
+            return sum;
+        }
+    }
+    ```
+  </Tab>
+</Tabs>
+
+### Serialization/Deserialization
+
+```kanagawa
+// Deserialize 4 bytes into word
+class Deserializer {
+    optional<uint32> deserialize(uint8 byte_in, bool is_last) {
+        auto [prev_bytes, curr_bytes] = 
+            serial_in_parallel_out<4, uint8>(byte_in);
+        
+        if (is_last) {
+            // Reconstruct word from bytes
+            uint32 word = (
+                (curr_bytes[3] << 24) |
+                (curr_bytes[2] << 16) |
+                (curr_bytes[1] << 8) |
+                (curr_bytes[0])
+            );
+            return {true, word};
+        }
+        return {false, 0};
+    }
+}
+
+// Serialize word into 4 bytes
+class Serializer {
+    uint8[4] serialize(uint32 word) {
+        uint8[4] bytes = {
+            word & 0xFF,
+            (word >> 8) & 0xFF,
+            (word >> 16) & 0xFF,
+            (word >> 24) & 0xFF
+        };
+        return bytes;
+    }
+}
+```
+
+### Pattern Detection
+
+```kanagawa
+class PatternDetector {
+    // Detect specific 4-byte sequence
+    bool detect_pattern(uint8 input) {
+        const uint8[4] pattern = {0xDE, 0xAD, 0xBE, 0xEF};
+        
+        auto [prev, curr] = 
+            serial_in_parallel_out<4, uint8>(input);
+        
+        // Check if current window matches pattern
+        bool match = true;
+        static for (const auto i : 4) {
+            match = match && (curr[i] == pattern[i]);
+        }
+        return match;
+    }
+}
+```
+
+### Width Conversion (Gearbox)
+
+```kanagawa
+// Convert 8-bit stream to 32-bit words
+class WidthConverter {
+    optional<uint32> narrow_to_wide(uint8 byte_in, count_t<4> byte_count) {
+        auto [prev, curr] = 
+            serial_in_parallel_out<4, uint8>(byte_in);
+        
+        // Output word when 4 bytes accumulated
+        if (byte_count == 3) {
+            uint32 word = reinterpret_cast<uint32>(curr);
+            return {true, word};
+        }
+        return {};
+    }
+}
+```
+
+## State Management
+
+### Per-Instance State
+
+Each call site of `serial_in_parallel_out` maintains its own independent state.
+
+```kanagawa
+class MultipleBuffers {
+    void process() {
+        // These maintain separate states
+        auto buf1 = serial_in_parallel_out<4, uint8>(data1);
+        auto buf2 = serial_in_parallel_out<4, uint8>(data2);
+    }
+}
+```
+
+### Shared State
+
+Wrap in non-inline function to share state across multiple callers.
+
+```kanagawa
+class SharedBuffer {
+    // Non-inline function shares state
+    pair<uint8[4], uint8[4]> shared_shift(uint8 data) {
+        return serial_in_parallel_out<4, uint8>(data);
+    }
+    
+    void caller1() {
+        auto result = shared_shift(0x11);
+    }
+    
+    void caller2() {
+        auto result = shared_shift(0x22);
+        // Sees state modified by caller1
+    }
+}
+```
+
+## Hardware Implementation
+
+<Note>
+**Register Chain**
+
+The shift register synthesizes to a chain of registers:
+
+```
+input ──┬──► [Reg N-1] ──► [Reg N-2] ──► ... ──► [Reg 1] ──► [Reg 0] ──► drops
+        │
+        └──► (parallel output)
+```
+
+- **Area**: N × sizeof(T) bits
+- **Delay**: Single register stage (1 clock cycle)
+- **Throughput**: 1 value per cycle
+</Note>
+
+### Initialization
+
+<CodeGroup>
+```kanagawa Zero-Init
+// State starts at zero
+auto result = serial_in_parallel_out<4, uint8, true>(data);
+// Initial state: {0, 0, 0, 0}
+```
+
+```kanagawa No Init
+// State undefined at startup (saves initialization logic)
+auto result = serial_in_parallel_out<4, uint8, false>(data);
+// Initial state: undefined
+```
+</CodeGroup>
+
+## Advanced Patterns
+
+### Windowed Processing
+
+```kanagawa
+class WindowProcessor {
+    // Process 3-element sliding window
+    result_t process_window(uint32 input) {
+        auto [prev, curr] = 
+            serial_in_parallel_out<3, uint32>(input);
+        
+        // Process window: curr[0], curr[1], curr[2]
+        return analyze_window(curr);
+    }
+}
+```
+
+### Pipeline Register
+
+```kanagawa
+class PipelineStage {
+    stage_output_t stage(stage_input_t input) {
+        // Compute result
+        auto result = complex_computation(input);
+        
+        // Insert pipeline register
+        auto [_, output] = 
+            serial_in_parallel_out<1, stage_output_t>(result);
+        
+        return output[0];
+    }
+}
+```
+
+### History Buffer
+
+```kanagawa
+class HistoryBuffer {
+    // Keep last 16 transactions
+    transaction_t get_history(transaction_t new_txn, index_t<16> age) {
+        auto [history, _] = 
+            serial_in_parallel_out<16, transaction_t>(new_txn);
+        
+        // Access historical transaction
+        return history[age];
+    }
+}
+```
+
+## Comparison with FIFOs
+
+<CardGroup cols={2}>
+  <Card title="Shift Register" icon="arrows-turn-to-dots">
+    **Use When:**
+    - Fixed, small number of stages
+    - Need parallel access to all stages
+    - Pattern matching or windowing
+    - Low-latency tap access
+    
+    **Characteristics:**
+    - Combinational access
+    - All stages always visible
+    - Fixed capacity
+  </Card>
+  
+  <Card title="FIFO" icon="list">
+    **Use When:**
+    - Variable occupancy
+    - Rate matching needed
+    - Large capacity required
+    - Sequential access sufficient
+    
+    **Characteristics:**
+    - Sequential access only
+    - Dynamic occupancy
+    - Blocking semantics
+  </Card>
+</CardGroup>
+
+## See Also
+
+- [FIFOs](/library/data/fifos) - Queue data structures
+- [Memories](/library/data/memories) - Block RAM storage
+- [Arrays](/library/data/arrays) - Fixed-size arrays

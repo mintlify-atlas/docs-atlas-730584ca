@@ -1,0 +1,73 @@
+---
+title: Integers
+description: Arbitrary-width integer types and operations
+---
+
+The `numeric.int` module provides integer utility functions and arbitrary-width signed/unsigned integer support.
+
+## Overview
+
+Kanagawa supports arbitrary-width integers with full operator support. Use type aliases from `type.stdtype` for common widths, or specify custom widths.
+
+```kanagawa
+// Standard widths
+uint8 a = 255;
+int32 b = -42;
+
+// Custom widths
+uint<7> seven_bit = 0x7F;
+int<13> thirteen_bit = -4096;
+```
+
+## Common Type Aliases
+
+From `type.stdtype`:
+
+- `uint8`, `uint16`, `uint32`, `uint64` - Unsigned integers
+- `int8`, `int16`, `int32`, `int64` - Signed integers
+- `index_t<N>` - Index type for N elements (0 to N-1)
+- `count_t<N>` - Count type (0 to N)
+
+## Utility Functions
+
+### `even(a)` / `odd(a)`
+
+Test integer parity.
+
+```kanagawa
+even(0)  // true
+even(1)  // false
+odd(1)   // true
+odd(2)   // false
+```
+
+## Operators
+
+All standard arithmetic, bitwise, and comparison operators are supported:
+
+```kanagawa
+// Arithmetic
+auto sum = a + b;
+auto diff = a - b;
+auto prod = a * b;
+auto quot = a / b;
+auto rem = a % b;
+
+// Bitwise
+auto and_val = a & b;
+auto or_val = a | b;
+auto xor_val = a ^ b;
+auto not_val = ~a;
+auto shl = a << 2;
+auto shr = a >> 2;
+
+// Comparison
+auto eq = (a == b);
+auto lt = (a < b);
+auto gt = (a > b);
+```
+
+## See Also
+
+- [Fixed-Point](/library/numeric/fixed-point) - Fixed-point arithmetic
+- [Floating-Point](/library/numeric/floating-point) - IEEE 754 floating-point

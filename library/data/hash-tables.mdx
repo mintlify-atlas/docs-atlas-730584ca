@@ -1,0 +1,257 @@
+---
+title: Hash Tables
+description: Hardware-optimized associative hash tables
+---
+
+The `data.hash_table` module provides a hardware hash table implementation with associative lookup, insert, and update operations.
+
+## Overview
+
+The `hash_table` class implements an associative container using Toeplitz hashing and linear probing. It supports concurrent access, generation-based reset, and lock-free operation.
+
+```kanagawa
+import data.hash_table
+
+using table_t = hash_table<uint32, uint64, 1024, 4>;
+table_t ht;
+
+// Insert or update entry
+auto result = ht.insert_or_update(
+    key,
+    false,  // reset=false
+    true,   // insert_on_miss=true
+    []() -> uint64 { return initial_value; },  // allocate
+    [](uint64 prev, bool inserted) -> uint64 {
+        return inserted ? prev : prev + 1;  // update
+    }
+);
+```
+
+## Hash Table Class
+
+### Template Parameters
+
+```kanagawa
+template<
+    typename Key,
+    typename Value,
+    auto Depth,
+    auto Associativity,
+    (Key)->index_t<Depth / Associativity> hash_fn = toeplitz_hash,
+    auto GenerationBits = 4,
+    auto MaxIterations = Depth,
+    auto DataBanks = 1,
+    auto HistorySize = 1,
+    auto MaxThreads = 512
+>
+class hash_table
+```
+
+<ParamField path="Key" type="typename">
+  Key type for table lookups
+</ParamField>
+
+<ParamField path="Value" type="typename">
+  Value type stored in table
+</ParamField>
+
+<ParamField path="Depth" type="auto">
+  Maximum number of elements. Must be multiple of `Associativity`.
+</ParamField>
+
+<ParamField path="Associativity" type="auto">
+  Number of ways per set (checked in parallel). Higher values increase throughput but use more resources.
+</ParamField>
+
+<ParamField path="hash_fn" type="function" default="toeplitz_hash">
+  Hash function mapping keys to set indices.
+</ParamField>
+
+<ParamField path="GenerationBits" type="auto" default="4">
+  Bits for generation ID. Higher values reduce reset overhead.
+</ParamField>
+
+<ParamField path="MaxIterations" type="auto" default="Depth">
+  Maximum probe iterations before returning error.
+</ParamField>
+
+<ParamField path="DataBanks" type="auto" default="1">
+  Number of banks for value storage. Increase for higher Fmax.
+</ParamField>
+
+<ParamField path="HistorySize" type="auto" default="1">
+  Size of hazard detection arrays. Larger values improve frequency.
+</ParamField>
+
+<ParamField path="MaxThreads" type="auto" default="512">
+  Maximum concurrent threads in `insert_or_update`.
+</ParamField>
+
+### Methods
+
+<ResponseField name="insert_or_update" type="optional<result>">
+  Combined insert/lookup/update operation.
+  
+  ```kanagawa
+  inline optional<result> insert_or_update(
+      Key key,
+      bool reset,
+      bool insert_on_miss,
+      ()->Value allocate_fn,
+      (Value, bool)->Value access_fn
+  )
+  ```
+  
+  **Parameters:**
+  - `key`: Key to lookup/insert
+  - `reset`: If true, clear all table entries first
+  - `insert_on_miss`: If true, insert key if not found
+  - `allocate_fn`: Called to create initial value for new keys
+  - `access_fn`: Called with current value and `inserted` flag
+  
+  **Returns:** `optional<result>` with lookup result, or invalid if not found and `insert_on_miss=false`
+</ResponseField>
+
+### Result Type
+
+```kanagawa
+struct result {
+    bool inserted;          // True if key was newly inserted
+    pair<Value, Value> value;  // Before and after values
+}
+```
+
+## Hashing
+
+### `toeplitz_hash<Hash, Key>(key)`
+
+Compute Toeplitz hash of key.
+
+```kanagawa
+auto hash = toeplitz_hash<index_t<256>, uint32>(key);
+```
+
+## Usage Examples
+
+### Basic Insert/Lookup
+
+```kanagawa
+hash_table<uint32, uint64, 256, 2> counter_table;
+
+void increment_counter(uint32 key) {
+    auto result = counter_table.insert_or_update(
+        key,
+        false,  // don't reset
+        true,   // insert if missing
+        []() -> uint64 { return 1; },  // initial value
+        [](uint64 prev, bool inserted) -> uint64 {
+            return inserted ? prev : prev + 1;
+        }
+    );
+    
+    if (result.is_valid) {
+        // result.value.inserted: true if new entry
+        // result.value.value.first: old count
+        // result.value.value.second: new count
+    }
+}
+```
+
+### Cache Implementation
+
+```kanagawa
+struct cache_entry {
+    bool valid;
+    uint64 data;
+    uint32 timestamp;
+}
+
+class Cache {
+    hash_table<uint32, cache_entry, 1024, 4> table;
+    
+    optional<uint64> lookup(uint32 addr) {
+        auto result = table.insert_or_update(
+            addr,
+            false,  // no reset
+            false,  // lookup only
+            []() -> cache_entry { return {}; },  // unused
+            [](cache_entry e, bool inserted) -> cache_entry {
+                return e;  // just return value
+            }
+        );
+        
+        if (result.is_valid && result.value.value.first.valid) {
+            return {true, result.value.value.first.data};
+        }
+        return {};
+    }
+    
+    void insert(uint32 addr, uint64 data, uint32 time) {
+        table.insert_or_update(
+            addr,
+            false,
+            true,  // insert if missing
+            [data, time]() -> cache_entry {
+                return {true, data, time};
+            },
+            [data, time](cache_entry old, bool inserted) -> cache_entry {
+                return {true, data, time};  // always update
+            }
+        );
+    }
+}
+```
+
+### Generational Reset
+
+```kanagawa
+class Statistics {
+    hash_table<uint32, uint64, 512, 4> stats;
+    
+    void new_epoch() {
+        // Reset entire table efficiently
+        stats.insert_or_update(
+            0,  // key unused during reset
+            true,  // reset=true
+            false,
+            []() -> uint64 { return 0; },
+            [](uint64 v, bool i) -> uint64 { return v; }
+        );
+    }
+    
+    void record_event(uint32 event_id) {
+        stats.insert_or_update(
+            event_id,
+            false,  // no reset
+            true,   // insert if missing
+            []() -> uint64 { return 1; },
+            [](uint64 count, bool inserted) -> uint64 {
+                return inserted ? count : count + 1;
+            }
+        );
+    }
+}
+```
+
+## Hardware Considerations
+
+<Note>
+**Area Usage**
+
+- **Tags**: Associativity × (Depth/Associativity) × (GenerationBits + sizeof(Key))
+- **Data**: Depth × sizeof(Value) / DataBanks per bank
+- **Associativity**: Higher = more area but better hit rate
+</Note>
+
+<Note>
+**Performance**
+
+- **Hit Latency**: 1 cycle (with HistorySize=0) to HistorySize+1 cycles
+- **Miss Latency**: Up to MaxIterations × set_lookup_time
+- **Throughput**: 1 operation per cycle (with no collisions)
+</Note>
+
+## See Also
+
+- [Memories](/library/data/memories) - Block RAM storage
+- [Atomic](/library/sync/atomic) - Synchronization primitives

@@ -1,0 +1,75 @@
+---
+title:'Design Patterns'
+description:'Common hardware design patterns'
+---
+
+## Producer-Consumer
+
+```kanagawa
+import data.fifo
+
+class Pipeline
+{
+private:
+    fifo<uint32, 16> _queue;
+
+public:
+    void Produce(uint32 data)
+    {
+        _queue.enqueue(data);
+    }
+    
+    uint32 Consume()
+    {
+        return _queue.dequeue();
+    }
+}
+```
+
+## Speculative Execution
+
+```kanagawa
+// Compute all branches, select later
+auto result_a = compute_a(x);
+auto result_b = compute_b(x);
+auto final = condition ? result_a : result_b;
+```
+
+## State Machines
+
+```kanagawa
+enum State : uint2 { Idle, Process, Done }
+
+class StateMachine
+{
+private:
+    State _state = State::Idle;
+
+public:
+    void Tick(bool start)
+    {
+        atomic
+        {
+            switch (_state)
+            {
+            case State::Idle:
+                if (start) _state = State::Process;
+                break;
+            case State::Process:
+                _state = State::Done;
+                break;
+            case State::Done:
+                _state = State::Idle;
+                break;
+            }
+        }
+    }
+}
+```
+
+## Related Topics
+
+<CardGroup cols={2}>
+<Card title="Effective Kanagawa" href="/best-practices/effective-kanagawa">Best practices</Card>
+<Card title="Concurrency" href="/concepts/concurrency">Parallel patterns</Card>
+</CardGroup>

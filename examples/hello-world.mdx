@@ -1,0 +1,211 @@
+---
+title: "Hello World"
+description: "Your first Kanagawa program - a simple hardware counter"
+---
+
+## Overview
+
+This example introduces the basics of Kanagawa by implementing a simple hardware counter. You'll learn about classes, methods, variables, and the `export` keyword.
+
+## Complete Example
+
+```kanagawa hello_world.k
+// A simple hardware counter class
+class Counter
+{
+private:
+    uint32 _count = 0;
+
+public:
+    // Main method - entry point for the hardware module
+    void main()
+    {
+        _count++;
+        print("Count: {}\n", _count);
+    }
+}
+
+// Export the class to make it a top-level hardware module
+export Counter;
+```
+
+## Understanding the Code
+
+<Steps>
+  <Step title="Define a class">
+    Kanagawa uses classes to describe hardware modules. The `Counter` class represents a hardware component with internal state.
+
+    ```kanagawa
+    class Counter
+    {
+        // Class members go here
+    }
+    ```
+  </Step>
+
+  <Step title="Add state with member variables">
+    Member variables become registers in hardware. The `_count` variable is a 32-bit unsigned integer initialized to 0.
+
+    ```kanagawa
+    private:
+        uint32 _count = 0;
+    ```
+
+    <Tip>Use `_` prefix for private members by convention.</Tip>
+  </Step>
+
+  <Step title="Implement the main method">
+    The `main()` method is the entry point. It executes every clock cycle, incrementing the counter and printing its value.
+
+    ```kanagawa
+    public:
+        void main()
+        {
+            _count++;
+            print("Count: {}\n", _count);
+        }
+    ```
+  </Step>
+
+  <Step title="Export the module">
+    The `export` keyword marks the class as a top-level hardware module that can be synthesized.
+
+    ```kanagawa
+    export Counter;
+    ```
+  </Step>
+</Steps>
+
+## Compiling and Running
+
+Compile the program to generate Verilog:
+
+```bash
+kanagawa compile hello_world.k -o counter.v
+```
+
+### Expected Output
+
+When simulated, the hardware produces:
+
+```
+Count: 1
+Count: 2
+Count: 3
+Count: 4
+...
+```
+
+## Key Concepts
+
+<AccordionGroup>
+  <Accordion title="Hardware Types">
+    Kanagawa provides precise bit-width types:
+    
+    - `uint32` - 32-bit unsigned integer
+    - `uint8` - 8-bit unsigned integer
+    - `int32` - 32-bit signed integer
+    - `bool` - single bit boolean
+    - `uint<N>` - custom N-bit unsigned integer
+    
+    Example:
+    ```kanagawa
+    uint5 small_value = 31;  // 5-bit value (0-31)
+    uint<128> large_value;    // 128-bit value
+    ```
+  </Accordion>
+
+  <Accordion title="The export Keyword">
+    Only exported classes become synthesizable hardware modules. A class without `export` is used as a helper component within other classes.
+    
+    ```kanagawa
+    class Helper { /* ... */ }
+    class TopLevel { Helper _helper; }
+    
+    export TopLevel;  // Only this becomes a top module
+    ```
+  </Accordion>
+
+  <Accordion title="Methods Execute Every Cycle">
+    Unlike software, the `main()` method doesn't "return" - it executes every clock cycle. Think of it as a continuous loop in hardware.
+    
+    ```kanagawa
+    void main()
+    {
+        // This code runs EVERY clock cycle
+        _count++;
+    }
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Try It Yourself
+
+<CardGroup cols={2}>
+  <Card title="Add a Reset" icon="rotate-left">
+    Modify the counter to reset when it reaches a maximum value:
+    
+    ```kanagawa
+    const auto MAX_COUNT = 10;
+    
+    void main()
+    {
+        if (_count >= MAX_COUNT)
+            _count = 0;
+        else
+            _count++;
+    }
+    ```
+  </Card>
+
+  <Card title="Count by Twos" icon="plus">
+    Change the increment amount:
+    
+    ```kanagawa
+    void main()
+    {
+        _count += 2;
+        print("Even count: {}\n", _count);
+    }
+    ```
+  </Card>
+
+  <Card title="Add a Parameter" icon="sliders">
+    Make the counter configurable with a template parameter:
+    
+    ```kanagawa
+    template <auto STEP = 1>
+    class Counter
+    {
+        void main()
+        {
+            _count += STEP;
+        }
+    }
+    
+    export Counter<5>;  // Count by 5
+    ```
+  </Card>
+
+  <Card title="Multiple Counters" icon="list-ol">
+    Create an array of counters:
+    
+    ```kanagawa
+    uint32[4] _counters = {};  // 4 counters
+    
+    void main()
+    {
+        static for (const auto i : 4)
+        {
+            _counters[i]++;
+        }
+    }
+    ```
+  </Card>
+</CardGroup>
+
+## Next Steps
+
+<Card title="Basic Pipeline" icon="forward" href="/examples/basic-pipeline">
+  Learn how to process data through hardware pipeline stages
+</Card>

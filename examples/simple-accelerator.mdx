@@ -1,0 +1,447 @@
+---
+title: "Simple Accelerator"
+description: "Create a hardware accelerator with memory interfaces and control logic"
+---
+
+## Overview
+
+This example shows how to build a simple matrix multiplication accelerator with memory interfaces. You'll learn about memory attributes, atomic operations, and hardware/software interfaces.
+
+## Complete Example
+
+```kanagawa matrix_accelerator.k
+import base
+import data.memory
+
+// Matrix multiplication accelerator
+template <auto SIZE = 8>
+class MatrixAccelerator
+{
+private:
+    // Memory arrays for input matrices and result
+    [[memory]] int16[SIZE * SIZE] _matrix_a = {};
+    [[memory]] int16[SIZE * SIZE] _matrix_b = {};
+    [[memory]] int32[SIZE * SIZE] _result = {};
+    
+    bool _computing = false;
+    index_t<SIZE> _row = 0;
+    index_t<SIZE> _col = 0;
+    index_t<SIZE> _k = 0;
+
+public:
+    // Write a value to matrix A
+    void write_a(index_t<SIZE * SIZE> addr, int16 value)
+    {
+        _matrix_a[addr] = value;
+    }
+    
+    // Write a value to matrix B
+    void write_b(index_t<SIZE * SIZE> addr, int16 value)
+    {
+        _matrix_b[addr] = value;
+    }
+    
+    // Read result matrix
+    int32 read_result(index_t<SIZE * SIZE> addr)
+    {
+        return _result[addr];
+    }
+    
+    // Start computation
+    void start_compute()
+    {
+        _computing = true;
+        _row = 0;
+        _col = 0;
+        _k = 0;
+        
+        // Initialize result matrix to zero
+        static for (const auto i : SIZE * SIZE)
+        {
+            _result[i] = 0;
+        }
+    }
+    
+    // Main computation loop - runs every cycle
+    void main()
+    {
+        if (_computing)
+        {
+            // Calculate: result[row][col] += A[row][k] * B[k][col]
+            index_t<SIZE * SIZE> a_idx = _row * SIZE + _k;
+            index_t<SIZE * SIZE> b_idx = _k * SIZE + _col;
+            index_t<SIZE * SIZE> r_idx = _row * SIZE + _col;
+            
+            int16 a_val = _matrix_a[a_idx];
+            int16 b_val = _matrix_b[b_idx];
+            
+            // Atomic read-modify-write for accumulation
+            atomic
+            {
+                _result[r_idx] += a_val * b_val;
+            }
+            
+            // Advance to next element
+            if (_k == SIZE - 1)
+            {
+                _k = 0;
+                if (_col == SIZE - 1)
+                {
+                    _col = 0;
+                    if (_row == SIZE - 1)
+                    {
+                        _computing = false;  // Done!
+                    }
+                    else
+                    {
+                        _row++;
+                    }
+                }
+                else
+                {
+                    _col++;
+                }
+            }
+            else
+            {
+                _k++;
+            }
+        }
+    }
+    
+    // Check if computation is complete
+    bool is_done()
+    {
+        return !_computing;
+    }
+}
+
+export MatrixAccelerator<8>;
+```
+
+## Understanding the Design
+
+<Steps>
+  <Step title="Declare memory arrays">
+    The `[[memory]]` attribute creates actual memory blocks in hardware:
+
+    ```kanagawa
+    [[memory]] int16[SIZE * SIZE] _matrix_a = {};
+    [[memory]] int16[SIZE * SIZE] _matrix_b = {};
+    [[memory]] int32[SIZE * SIZE] _result = {};
+    ```
+
+    <Info>
+      Without `[[memory]]`, arrays become registers. Use `[[memory]]` for large arrays to save area and use BRAM.
+    </Info>
+  </Step>
+
+  <Step title="Add control state">
+    State variables track computation progress:
+
+    ```kanagawa
+    bool _computing = false;
+    index_t<SIZE> _row = 0;
+    index_t<SIZE> _col = 0;
+    index_t<SIZE> _k = 0;
+    ```
+
+    These become hardware registers that persist across clock cycles.
+  </Step>
+
+  <Step title="Implement memory interface methods">
+    Provide methods to read/write memory from external interfaces:
+
+    ```kanagawa
+    void write_a(index_t<SIZE * SIZE> addr, int16 value)
+    {
+        _matrix_a[addr] = value;
+    }
+    
+    int32 read_result(index_t<SIZE * SIZE> addr)
+    {
+        return _result[addr];
+    }
+    ```
+
+    These methods can be called from external logic or a host processor.
+  </Step>
+
+  <Step title="Use atomic for read-modify-write">
+    The `atomic` block ensures the operation completes in one cycle:
+
+    ```kanagawa
+    atomic
+    {
+        _result[r_idx] += a_val * b_val;
+    }
+    ```
+
+    This prevents pipeline issues with memory dependencies.
+  </Step>
+
+  <Step title="Implement nested iteration">
+    Three nested loops (row, col, k) are managed explicitly with state:
+
+    ```kanagawa
+    if (_k == SIZE - 1) {
+        _k = 0;
+        if (_col == SIZE - 1) {
+            _col = 0;
+            if (_row == SIZE - 1) {
+                _computing = false;  // All done
+            } else {
+                _row++;
+            }
+        } else {
+            _col++;
+        }
+    } else {
+        _k++;
+    }
+    ```
+  </Step>
+</Steps>
+
+## Optimized Parallel Version
+
+Here's a version that computes multiple elements per cycle:
+
+```kanagawa
+import base
+import data.memory
+
+// Parallel matrix accelerator - computes entire row per cycle
+template <auto SIZE = 8>
+class ParallelMatrixAccelerator
+{
+private:
+    [[memory]] int16[SIZE * SIZE] _matrix_a = {};
+    [[memory]] int16[SIZE * SIZE] _matrix_b = {};
+    [[memory]] int32[SIZE * SIZE] _result = {};
+    
+    bool _computing = false;
+    index_t<SIZE> _row = 0;
+
+public:
+    void compute_row()
+    {
+        if (_computing)
+        {
+            // Compute entire row in parallel
+            static for (const auto col : SIZE)
+            {
+                int32 sum = 0;
+                
+                // Multiply-accumulate for this element
+                static for (const auto k : SIZE)
+                {
+                    index_t<SIZE * SIZE> a_idx = _row * SIZE + k;
+                    index_t<SIZE * SIZE> b_idx = k * SIZE + col;
+                    
+                    sum += _matrix_a[a_idx] * _matrix_b[b_idx];
+                }
+                
+                index_t<SIZE * SIZE> r_idx = _row * SIZE + col;
+                _result[r_idx] = sum;
+            }
+            
+            // Move to next row
+            if (_row == SIZE - 1)
+            {
+                _computing = false;
+                _row = 0;
+            }
+            else
+            {
+                _row++;
+            }
+        }
+    }
+    
+    void start_compute()
+    {
+        _computing = true;
+        _row = 0;
+    }
+    
+    [[no_backpressure]]
+    bool is_done()
+    {
+        return !_computing;
+    }
+}
+
+export ParallelMatrixAccelerator<8>;
+```
+
+<Warning>
+  The parallel version uses significantly more area (multipliers) but completes in SIZE cycles instead of SIZE³ cycles.
+</Warning>
+
+## Memory and Synchronization
+
+<AccordionGroup>
+  <Accordion title="Memory Attribute">
+    Use `[[memory]]` to map arrays to BRAM instead of registers:
+    
+    ```kanagawa
+    // Creates BRAM block - area efficient for large arrays
+    [[memory]] uint32[1024] _large_array;
+    
+    // Creates registers - fast but uses more area
+    uint32[16] _small_array;
+    ```
+    
+    Rule of thumb: Use `[[memory]]` for arrays larger than ~64 elements.
+  </Accordion>
+
+  <Accordion title="Atomic Operations">
+    `atomic` ensures a sequence of operations appears atomic from external observers:
+    
+    ```kanagawa
+    atomic
+    {
+        // Read-modify-write appears as single operation
+        uint32 val = _memory[addr];
+        val = val + increment;
+        _memory[addr] = val;
+    }
+    ```
+    
+    This is essential for memories accessed from multiple sources.
+  </Accordion>
+
+  <Accordion title="Barrier Synchronization">
+    Use `barrier` to ensure ordering between pipeline stages:
+    
+    ```kanagawa
+    for (const auto i : COUNT)
+    {
+        _buffer[i] = compute_step1(i);
+        
+        barrier;  // Ensure all step1 completes before step2
+        
+        _buffer[i] = compute_step2(_buffer[i]);
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="No Backpressure Annotation">
+    Mark methods that always complete in one cycle:
+    
+    ```kanagawa
+    [[no_backpressure]]
+    bool is_ready()
+    {
+        return _state == READY;
+    }
+    ```
+    
+    This helps the compiler optimize interface generation.
+  </Accordion>
+</AccordionGroup>
+
+## Complete Accelerator with Memory Controller
+
+Here's a realistic example with external memory interface:
+
+```kanagawa
+import base
+import data.memory
+
+// Hardware accelerator with external memory interface
+class MemoryAccelerator
+{
+private:
+    // Internal state
+    const auto BUFFER_SIZE = 256;
+    [[memory]] uint32[BUFFER_SIZE] _local_buffer = {};
+    
+    bool _busy = false;
+    index_t<BUFFER_SIZE> _addr = 0;
+    
+    // External memory interface (callbacks)
+    [[async]] (uint32 addr) -> uint32 read_external_mem;
+    [[async]] (uint32 addr, uint32 data) -> void write_external_mem;
+
+public:
+    // Transfer data from external memory to local buffer
+    void dma_transfer(uint32 base_addr, index_t<BUFFER_SIZE> count)
+    {
+        _busy = true;
+        _addr = 0;
+        
+        for (const auto i : count)
+        {
+            // Asynchronous memory read
+            uint32 data = read_external_mem(base_addr + i * 4);
+            _local_buffer[i] = data;
+        }
+        
+        _busy = false;
+    }
+    
+    // Process data in local buffer
+    void process_local()
+    {
+        static for (const auto i : BUFFER_SIZE)
+        {
+            // Apply some transformation
+            _local_buffer[i] = _local_buffer[i] * 2 + 1;
+        }
+    }
+    
+    // Write results back to external memory
+    void dma_writeback(uint32 base_addr, index_t<BUFFER_SIZE> count)
+    {
+        for (const auto i : count)
+        {
+            write_external_mem(base_addr + i * 4, _local_buffer[i]);
+        }
+    }
+    
+    bool is_busy()
+    {
+        return _busy;
+    }
+}
+
+export MemoryAccelerator;
+```
+
+## Compiling
+
+```bash
+# Compile with specific target device
+kanagawa compile matrix_accelerator.k -o matrix_mult.v --device xcvu9p
+
+# Generate with timing reports
+kanagawa compile matrix_accelerator.k -o matrix_mult.v --report-timing
+```
+
+## Performance Considerations
+
+<CardGroup cols={2}>
+  <Card title="Parallel Execution" icon="bolt">
+    Use `static for` to parallelize independent operations
+  </Card>
+  
+  <Card title="Memory Ports" icon="door-open">
+    BRAM has limited read/write ports - avoid excessive concurrent accesses
+  </Card>
+  
+  <Card title="Pipeline Depth" icon="layer-group">
+    Deeper pipelines improve throughput but add latency
+  </Card>
+  
+  <Card title="Resource Usage" icon="microchip">
+    Balance between area (LUTs, DSPs) and performance
+  </Card>
+</CardGroup>
+
+## Next Steps
+
+<Card title="RISC-V Core" icon="microchip" href="/examples/risc-v-core">
+  Explore the complete RISC-V processor implementation
+</Card>

@@ -1,0 +1,171 @@
+---
+title: Testing
+description: Learn how to run the Kanagawa unit test suite and understand the different test types
+---
+
+Kanagawa uses ctest for running unit tests. The test suite is organized into different categories, each with specific build and run targets.
+
+<Note>
+  Unit tests are currently only supported on Ubuntu 24. The compiler can be built on Windows and macOS, but the full test suite requires Linux.
+</Note>
+
+## Running Tests
+
+Tests use a prefix in the test name to allow groups of related tests to be run separately.
+
+### Using CTest
+
+<CodeGroup>
+```bash Library Tests
+# Run all library tests
+ctest --verbose -R "^library\\."
+
+# Run a specific library test
+ctest --verbose -R "^library\\.processor_risc_v_1_hart"
+```
+
+```bash Syntax Tests
+# Run front-end syntax tests
+ctest --verbose -R "^syntax\\."
+```
+
+```bash All Test Types
+# Run library tests
+ctest --verbose -R "^library\\."
+
+# Run syntax (front-end) tests
+ctest --verbose -R "^syntax\\."
+
+# Run interface tests
+ctest --verbose -R "^interface\\."
+
+# Run logic tests
+ctest --verbose -R "^logic\\."
+
+# Run runtime RTL tests
+ctest --verbose -R "^runtime\\."
+
+# Run compiler tests
+ctest --verbose -R "^compiler\\."
+
+# Run documentation check tests
+ctest --verbose -R "^chkdoc\\."
+
+# Run sandcastle tests
+ctest --verbose -R "^sandcastle\\."
+```
+</CodeGroup>
+
+### Using Ninja Targets
+
+For convenience, CMake targets are provided to run all tests of each type:
+
+```bash
+ninja -j 2 run_syntax_tests
+ninja -j 2 run_interface_tests
+ninja -j 2 run_logic_tests
+ninja -j 2 run_library_tests
+ninja -j 2 run_runtime_rtl_tests
+ninja -j 2 run_compiler_tests
+ninja -j 2 run_chkdoc_tests
+ninja -j 2 run_sandcastle_tests
+```
+
+<Note>
+  These convenience targets will automatically build any dependencies before running the tests.
+</Note>
+
+## Test Types
+
+The following table describes the different test categories available in Kanagawa:
+
+| Test Type | Description | Build Target | Run Target | CTest Command |
+|-----------|-------------|--------------|------------|---------------|
+| **Syntax** | Front-end parser and syntax validation tests | `syntax_tests` | `run_syntax_tests` | `ctest --verbose -R "^syntax\\."` |
+| **Interface** | Interface and API tests | `interface_tests` | `run_interface_tests` | `ctest --verbose -R "^interface\\."` |
+| **Logic** | Logic and behavioral tests | `logic_tests` | `run_logic_tests` | `ctest --verbose -R "^logic\\."` |
+| **Library** | Standard library functionality tests | `library_tests` | `run_library_tests` | `ctest --verbose -R "^library\\."` |
+| **Runtime RTL** | Runtime and RTL (Register Transfer Level) tests | `runtime_rtl_tests` | `run_runtime_rtl_tests` | `ctest --verbose -R "^runtime\\."` |
+| **Compiler** | Compiler functionality and code generation tests | `compiler_tests` | `run_compiler_tests` | `ctest --verbose -R "^compiler\\."` |
+| **Chkdoc** | Documentation checking and validation tests | `chkdoc_tests` | `run_chkdoc_tests` | `ctest --verbose -R "^chkdoc\\."` |
+| **Sandcastle** | Documentation generation tool tests | N/A | `run_sandcastle_tests` | `ctest --verbose -R "^sandcastle\\."` |
+
+## Memory Considerations for WSL
+
+<Warning>
+  In WSL environments, processes will fail if the total memory footprint exceeds available memory and swap space.
+</Warning>
+
+Because of limited memory and swap space in WSL sessions, it's easy to run into memory issues when running unit tests.
+
+**Recommendation:** Limit the number of concurrent processes to 2 in WSL environments:
+
+```bash
+# Use -j2 option with ninja
+ninja -j 2 run_library_tests
+
+# Use -j2 option with ctest
+ctest -j 2 --verbose -R "^library\\."
+```
+
+## Building Test Targets
+
+Before running tests, you may want to build specific test targets:
+
+```bash
+# Build library tests
+ninja -j $(nproc) library_tests
+
+# Build syntax tests
+ninja -j $(nproc) syntax_tests
+
+# Build all test types
+ninja -j $(nproc) syntax_tests interface_tests logic_tests library_tests
+```
+
+## Test Workflow
+
+<Steps>
+  <Step title="Build the test target">
+    ```bash
+    ninja -j $(nproc) library_tests
+    ```
+  </Step>
+
+  <Step title="Run the tests">
+    Using the convenience target:
+    ```bash
+    ninja -j 2 run_library_tests
+    ```
+
+    Or using ctest directly:
+    ```bash
+    ctest --verbose -R "^library\\."
+    ```
+  </Step>
+
+  <Step title="Run specific tests (optional)">
+    To run a single test:
+    ```bash
+    ctest --verbose -R "^library\\.processor_risc_v_1_hart"
+    ```
+  </Step>
+</Steps>
+
+## CI Testing
+
+The CI pipeline runs tests on:
+- **Ubuntu 24** - Full test suite
+- **Windows 2019** - Build verification only
+- **macOS** - Build verification only
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Building" icon="hammer" href="/resources/building">
+    Learn how to build Kanagawa from source
+  </Card>
+  <Card title="Contributing" icon="code-pull-request" href="/resources/contributing">
+    Contribute to the Kanagawa project
+  </Card>
+</CardGroup>

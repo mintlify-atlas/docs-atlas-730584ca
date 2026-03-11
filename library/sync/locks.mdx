@@ -1,0 +1,98 @@
+---
+title: Locks
+description: Mutual exclusion and synchronization primitives
+---
+
+The `sync.lock` module provides locks and semaphores for thread synchronization.
+
+## Mutex
+
+Mutual exclusion lock.
+
+```kanagawa
+class mutex
+```
+
+**Methods:**
+- `lock()` - Acquire lock (blocks if held)
+- `unlock()` - Release lock
+
+**Example:**
+```kanagawa
+class SharedResource {
+    mutex mtx;
+    uint32 data;
+    
+    void update(uint32 new_data) {
+        mtx.lock();
+        data = new_data;
+        mtx.unlock();
+    }
+}
+```
+
+## Reader-Writer Lock
+
+Multiple readers or single writer.
+
+```kanagawa
+class rwlock<auto MaxThreads>
+```
+
+**Methods:**
+- `read_lock()` / `read_unlock()`
+- `write_lock()` / `write_unlock()`
+
+**Example:**
+```kanagawa
+class Cache {
+    rwlock<512> lock;
+    memory<uint32, 256> data;
+    
+    uint32 read(index_t<256> addr) {
+        lock.read_lock();
+        auto value = data[addr];
+        lock.read_unlock();
+        return value;
+    }
+    
+    void write(index_t<256> addr, uint32 value) {
+        lock.write_lock();
+        data[addr] = value;
+        lock.write_unlock();
+    }
+}
+```
+
+## Semaphore
+
+Counting semaphore.
+
+```kanagawa
+class semaphore<auto M, auto I, bool Blocking = true>
+```
+
+**Methods:**
+- `wait()` - Decrement (blocks if zero)
+- `post()` - Increment
+- `count()` - Current value
+
+**Example:**
+```kanagawa
+class ResourcePool {
+    semaphore<10, 10> available;
+    
+    void acquire() {
+        available.wait();  // Blocks until resource free
+    }
+    
+    void release() {
+        available.post();  // Free resource
+    }
+}
+```
+
+## See Also
+
+- [Atomic](/library/sync/atomic) - Atomic operations
+- [Loops](/library/control/loops) - Parallel iteration

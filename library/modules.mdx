@@ -1,0 +1,232 @@
+---
+title: Module Reference
+description: Complete reference of all standard library modules
+---
+
+This page provides a comprehensive reference of all modules in the Kanagawa Standard Library.
+
+## Data Structures
+
+### `data.array`
+
+Operations on fixed-size arrays including transformations, reductions, and scans.
+
+**Key Functions:**
+- `map`, `reduce`, `foldr`, `foldl` - Functional operations
+- `zip`, `unzip` - Array combination/separation
+- `prefix_sum`, `inclusive_scan` - Parallel prefix operations
+- `bitonic_sort`, `partial_sort` - Sorting networks
+- `transpose`, `rotate_array_left`, `rotate_array_right` - Array transformations
+
+### `data.vector`
+
+Operations on variable-length arrays with dynamic sizing.
+
+**Key Types:**
+- `vector<T, N>` - Variable-length array with max size N
+
+**Key Functions:**
+- `push_back`, `pop_back`, `insert`, `erase` - Modifiers
+- `map`, `reduce`, `gather`, `scatter` - Operations
+- `sharded_map`, `sharded_for_each` - Parallel processing
+
+### `data.fifo`
+
+First-in-first-out queue implementations.
+
+**Key Types:**
+- `FIFO<T, Size, EnqueueBlocking, DequeueBlocking>` - Basic FIFO
+- `FIFO_store_and_forward<T, Size, DequeueBlocking>` - Store-and-forward FIFO
+- `fifo_nb<T, Size>` - Non-blocking FIFO with polling
+
+### `data.buffer`
+
+Shift registers and data staging buffers.
+
+**Key Functions:**
+- `serial_in_parallel_out<N, T>` - Shift register implementation
+
+### `data.hash_table`
+
+Hardware hash table with associative lookup.
+
+**Key Types:**
+- `hash_table<Key, Value, Depth, Associativity>` - Associative hash table
+
+**Key Functions:**
+- `toeplitz_hash<Hash, Key>` - Toeplitz hash function
+- `insert_or_update` - Combined insert/lookup/modify
+
+### `data.memory`
+
+Block RAM abstractions with various configurations.
+
+**Key Types:**
+- `memory<T, N>` - Standard memory
+- `memory_norep<T, N>` - Non-replicated memory
+- `memory_ecc<T, N>` - ECC-protected memory
+- `memory_ecc_strict<T, N>` - Strict ECC checking
+- `memory_ecc_relaxed<T, N>` - Relaxed ECC checking
+
+## Numeric Types
+
+### `numeric.int`
+
+Integer utility functions.
+
+**Key Functions:**
+- `even`, `odd` - Parity testing
+
+### `numeric.fixed`
+
+Fixed-point arithmetic with Q-format representation.
+
+**Key Types:**
+- `fixed<I, F>` - Fixed-point with I integer bits and F fractional bits
+
+**Key Functions:**
+- `round`, `ceil`, `floor`, `trunc` - Rounding operations
+- `abs`, `min`, `max` - Basic operations
+- `sqrt`, `reciprocal`, `invsqrt` - Roots and reciprocals
+- `log2`, `log10`, `log`, `exp2`, `exp` - Exponentials and logarithms
+- `sin`, `cos` - Trigonometric functions
+- `pow` - Power function
+
+### `numeric.float32`
+
+IEEE 754 single-precision floating-point.
+
+**Key Functions:**
+- `add`, `sub`, `mul`, `rcp` - Arithmetic operations
+- `eq`, `lt`, `gt` - Comparisons
+- `isnan`, `isinf`, `isfinite`, `isnormal` - Classification
+- `sqrt`, `sin`, `cos`, `atan` - Transcendental functions
+- `log2`, `log10`, `log`, `exp2`, `exp` - Exponentials and logarithms
+- `from_int`, `to_int`, `from_uint`, `to_uint` - Conversions
+
+### `numeric.float64`
+
+IEEE 754 double-precision floating-point (similar API to float32).
+
+### `numeric.complex`
+
+Complex number arithmetic.
+
+**Key Types:**
+- `complex<T>` - Complex number with real and imaginary parts
+
+## Synchronization
+
+### `sync.atomic`
+
+Atomic operations on shared state.
+
+**Key Functions:**
+- `atomically<T>` - Atomically modify state
+- `atomically_one_of<N, T>` - Interleave updates across N states
+- `first`, `second` - Extract old/new values from atomic result
+
+### `sync.lock`
+
+Locking primitives for mutual exclusion.
+
+**Key Types:**
+- `mutex` - Mutual exclusion lock
+- `rwlock<MaxThreads>` - Reader-writer lock
+- `semaphore<M, I, Blocking>` - Counting semaphore
+
+## Control Flow
+
+### `control.loop`
+
+Looping constructs for iteration.
+
+**Key Functions:**
+- `pipelined_for<I>` - Pipelined iteration
+- `pipelined_map<N, I, T>` - Pipelined map returning array
+- `pipelined_last<I, T>` - Pipelined iteration returning last value
+- `pipelined_do<I>` - Pipelined iteration with condition
+- `parallel_for<N>` - Parallel iteration across N instances
+- `parallel_map<N, T>` - Parallel map across N instances
+- `range_for<T>` - Iteration over range with step
+- `while_do` - Conditional iteration
+
+### `control.async`
+
+Asynchronous execution patterns.
+
+**Key Types:**
+- `async_await<T, ReturnDepth, WaitForDepth>` - Async/await pattern
+- `fork_join<T, N, ReturnDepth, WaitForDepth>` - Fork-join parallelism
+
+**Key Functions:**
+- `async_then<T>` - Execute task and call continuation
+- `async_exec` - Execute task asynchronously
+
+### `control.fsm`
+
+Finite state machine helpers.
+
+**Key Functions:**
+- `speculate_updates<StateCount>` - Speculative state update
+- `apply_update` - Apply aggregated state update
+
+## IP Blocks
+
+### `processor.risc_v`
+
+RISC-V RV32I soft-core processor.
+
+**Key Types:**
+- `RISC_V<HARTS, IMEM_LENGTH, DMEM_LENGTH, ...>` - Configurable RISC-V core
+
+**Key Methods:**
+- `start` - Start processor execution
+- `stop` - Stop processor
+- `imem_write` - Write to instruction memory
+- `dmem_read`, `dmem_write` - Access data memory
+
+### `intel.config`
+
+Intel FPGA device configuration.
+
+**Supported Devices:**
+- Intel Agilex 7
+- Intel Stratix 10
+- Intel Arria 10
+
+### `xilinx.config`
+
+Xilinx FPGA device configuration.
+
+**Supported Devices:**
+- Xilinx UltraScale+
+
+## Utility Modules
+
+### `data.optional`
+
+Optional value type for representing presence/absence.
+
+**Key Types:**
+- `optional<T>` - Optional value with `is_valid` flag
+
+### `data.tuple`
+
+Tuple types for grouping values.
+
+**Key Types:**
+- `pair<T1, T2>` - Two-element tuple
+- `tuple2<T1, T2>` - Alias for pair
+
+### `data.order`
+
+Ordering and comparison functions.
+
+### `type.stdtype`
+
+Standard type aliases (uint8, int32, etc.).
+
+### `type.coerce`
+
+Type coercion and casting utilities.

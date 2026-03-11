@@ -1,0 +1,299 @@
+---
+title: "Basic Pipeline"
+description: "Build a multi-stage data processing pipeline with automatic flow control"
+---
+
+## Overview
+
+This example demonstrates how to create a pipelined hardware design that processes data through multiple stages. You'll learn about loops, arrays, and pipeline control.
+
+## Complete Example
+
+```kanagawa pipeline.k
+import base
+
+// A three-stage image processing pipeline
+class ImageFilter
+{
+private:
+    const auto WIDTH = 64;
+    const auto HEIGHT = 64;
+    const auto PIXELS = WIDTH * HEIGHT;
+
+    uint8[PIXELS] _input_buffer = {};
+    uint8[PIXELS] _output_buffer = {};
+
+public:
+    // Process pixels through a 3-stage pipeline
+    void main()
+    {
+        for (const auto i : PIXELS)
+        {
+            // Stage 1: Read pixel
+            uint8 pixel = _input_buffer[i];
+            
+            // Stage 2: Apply brightness adjustment
+            uint9 brightened = pixel + 32;  // +32 brightness
+            
+            // Stage 3: Clamp to valid range and write
+            _output_buffer[i] = (brightened > 255) ? 255 : static_cast<uint8>(brightened);
+        }
+    }
+    
+    // Method to load input data
+    void load_pixel(index_t<PIXELS> addr, uint8 value)
+    {
+        _input_buffer[addr] = value;
+    }
+    
+    // Method to read output data
+    uint8 read_pixel(index_t<PIXELS> addr)
+    {
+        return _output_buffer[addr];
+    }
+}
+
+export ImageFilter;
+```
+
+## Understanding Pipeline Stages
+
+<Steps>
+  <Step title="Define constants for dimensions">
+    Use `const auto` for compile-time constants that configure your design:
+
+    ```kanagawa
+    const auto WIDTH = 64;
+    const auto HEIGHT = 64;
+    const auto PIXELS = WIDTH * HEIGHT;
+    ```
+
+    These values are known at compile time and can be used for array sizes and loop bounds.
+  </Step>
+
+  <Step title="Create storage buffers">
+    Arrays become memory blocks in hardware. Initialize with `{}` for zero initialization:
+
+    ```kanagawa
+    uint8[PIXELS] _input_buffer = {};   // 4096 bytes of input
+    uint8[PIXELS] _output_buffer = {};  // 4096 bytes of output
+    ```
+
+    <Info>Arrays are synthesized as on-chip memory (BRAM) or registers depending on size and access patterns.</Info>
+  </Step>
+
+  <Step title="Process data in a loop">
+    The `for` loop creates a hardware pipeline that processes one pixel per cycle:
+
+    ```kanagawa
+    for (const auto i : PIXELS)
+    {
+        uint8 pixel = _input_buffer[i];           // Stage 1: Read
+        uint9 brightened = pixel + 32;            // Stage 2: Compute
+        _output_buffer[i] = clamp(brightened);    // Stage 3: Write
+    }
+    ```
+
+    Each iteration becomes a pipeline stage with automatic flow control.
+  </Step>
+
+  <Step title="Handle overflow with wider types">
+    Notice `uint9` for the intermediate result - Kanagawa automatically determines the minimum bit width needed:
+
+    ```kanagawa
+    uint9 brightened = pixel + 32;  // 255 + 32 = 287, needs 9 bits
+    ```
+
+    Then clamp and cast back to 8 bits:
+
+    ```kanagawa
+    _output_buffer[i] = (brightened > 255) ? 255 : static_cast<uint8>(brightened);
+    ```
+  </Step>
+</Steps>
+
+## Advanced Pipeline Example
+
+Here's a more sophisticated pipeline with multiple operations:
+
+```kanagawa
+import base
+
+// Multi-stage data processing pipeline
+class DataProcessor
+{
+private:
+    const auto BUFFER_SIZE = 1024;
+    
+    struct pixel_t
+    {
+        uint8 r;
+        uint8 g;
+        uint8 b;
+    }
+
+public:
+    void process_stream()
+    {
+        pixel_t[BUFFER_SIZE] pixels;
+        
+        for (const auto i : BUFFER_SIZE)
+        {
+            // Stage 1: Read RGB pixel
+            pixel_t p = pixels[i];
+            
+            // Stage 2: Convert to grayscale using luminance formula
+            // Y = 0.299R + 0.587G + 0.114B (using integer approximation)
+            uint16 gray = (p.r * 77 + p.g * 150 + p.b * 29) >> 8;
+            
+            // Stage 3: Apply threshold
+            uint8 binary = (gray > 128) ? 255 : 0;
+            
+            // Stage 4: Store result
+            pixels[i].r = binary;
+            pixels[i].g = binary;
+            pixels[i].b = binary;
+        }
+    }
+}
+
+export DataProcessor;
+```
+
+## Pipeline Control
+
+<AccordionGroup>
+  <Accordion title="Automatic Pipelining">
+    Regular `for` loops automatically create pipelines with backpressure handling:
+    
+    ```kanagawa
+    for (const auto i : COUNT)
+    {
+        // Each iteration is a pipeline stage
+        // Compiler inserts registers between stages
+    }
+    ```
+    
+    The compiler analyzes data dependencies and inserts pipeline registers automatically.
+  </Accordion>
+
+  <Accordion title="Static Unrolling">
+    Use `static for` to completely unroll a loop at compile time:
+    
+    ```kanagawa
+    static for (const auto i : 4)
+    {
+        // Creates 4 parallel instances
+        // No loop hardware generated
+        _results[i] = _inputs[i] * 2;
+    }
+    ```
+    
+    This creates parallel hardware for each iteration.
+  </Accordion>
+
+  <Accordion title="Pipelined For">
+    For explicit pipeline control with iteration counts:
+    
+    ```kanagawa
+    pipelined_for(128, [](index_t<128> i)
+    {
+        // Process 128 iterations through pipeline
+        // Lambda captures allow flexible data access
+    });
+    ```
+  </Accordion>
+
+  <Accordion title="Index Types">
+    Use `index_t<N>` for loop indices to get exactly the right bit width:
+    
+    ```kanagawa
+    index_t<256> idx;   // 8-bit index (0-255)
+    index_t<1024> addr; // 10-bit index (0-1023)
+    ```
+    
+    This ensures optimal hardware generation.
+  </Accordion>
+</AccordionGroup>
+
+## Compiling and Running
+
+```bash
+# Compile to Verilog
+kanagawa compile pipeline.k -o image_filter.v
+
+# With optimization for maximum frequency
+kanagawa compile pipeline.k -o image_filter.v --optimize fmax
+```
+
+## Real-World Pipeline Pattern
+
+Here's a complete example with input/output interfaces:
+
+```kanagawa
+import base
+
+template <auto STAGES = 4>
+class FirFilter
+{
+private:
+    const int16[STAGES] _coefficients = {32, 64, 64, 32};  // Fixed coefficients
+    int16[STAGES] _taps = {};  // Delay line
+
+public:
+    // Process one sample per cycle
+    int16 filter(int16 input_sample)
+    {
+        // Shift new sample into delay line
+        static for (const auto i : STAGES - 1)
+        {
+            _taps[STAGES - 1 - i] = _taps[STAGES - 2 - i];
+        }
+        _taps[0] = input_sample;
+        
+        // Multiply-accumulate
+        int32 accumulator = 0;
+        static for (const auto i : STAGES)
+        {
+            accumulator += _taps[i] * _coefficients[i];
+        }
+        
+        // Scale and return (divide by 128)
+        return static_cast<int16>(accumulator >> 7);
+    }
+    
+    void main()
+    {
+        // Main processing loop would go here
+        // This method is called every clock cycle
+    }
+}
+
+export FirFilter<4>;
+```
+
+## Key Takeaways
+
+<CardGroup cols={2}>
+  <Card title="Loops Create Pipelines" icon="repeat">
+    Regular loops automatically generate pipelined hardware with flow control
+  </Card>
+  
+  <Card title="Static for Unrolls" icon="expand">
+    `static for` creates parallel instances, not sequential hardware
+  </Card>
+  
+  <Card title="Type Widths Matter" icon="ruler">
+    Use precise bit widths (`uint9`, `int16`) to optimize area and timing
+  </Card>
+  
+  <Card title="Arrays Become Memory" icon="memory">
+    Arrays are synthesized as on-chip memory blocks (BRAM)
+  </Card>
+</CardGroup>
+
+## Next Steps
+
+<Card title="Simple Accelerator" icon="gauge-high" href="/examples/simple-accelerator">
+  Learn to build a custom hardware accelerator with external interfaces
+</Card>

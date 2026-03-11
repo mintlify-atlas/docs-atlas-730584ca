@@ -1,0 +1,53 @@
+---
+title:'Effective Kanagawa'
+description:'Best practices for hardware design'
+---
+
+## Shared State Management
+
+###  No Shared State (Best)
+
+```kanagawa
+inline uint32 Pure(uint32 a, uint32 b)
+{
+    return a + b;  // No synchronization needed
+}
+```
+
+### Single Atomic Block
+
+```kanagawa
+inline uint32 Accumulate(uint32 value)
+{
+    atomic
+    {
+        static uint32 _sum = 0;
+        _sum += value;
+        return _sum;
+    }
+}
+```
+
+## Threading Best Practices
+
+- Use `static for` for fixed parallelism
+- Use `pipelined_for` for dynamic parallelism
+- Minimize atomic blocks
+- Keep atomic sections small
+
+## Compiler Settings
+
+```bash
+# Fast compilation
+kanagawa --optimize=1 --work-list-size=16
+
+# High quality
+kanagawa --optimize=2 --work-list-size=20
+```
+
+## Related Topics
+
+<CardGroup cols={2}>
+<Card title="Design Patterns" href="/best-practices/design-patterns">Common patterns</Card>
+<Card title="Optimization" href="/best-practices/optimization">Performance tuning</Card>
+</CardGroup>

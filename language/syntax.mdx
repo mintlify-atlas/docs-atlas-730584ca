@@ -1,0 +1,459 @@
+---
+title: 'Syntax'
+description: 'Kanagawa language syntax fundamentals'
+---
+
+## Program Structure
+
+A Kanagawa program (or hardware design) is built from types and functions. There are no global variables or global state—all state is either class data members or static local variables.
+
+<Note>
+Unlike software programs, hardware designs don't have an entry point. Instead, designs are instantiated like objects and can be used as IP blocks, FPGA accelerators, or ASIC chips.
+</Note>
+
+## Comments
+
+Kanagawa supports single-line, multi-line, and nested comments:
+
+```kanagawa
+// Single line comment
+
+/*
+  Multi-line comment
+*/
+
+/*
+  /*
+    Nested multi-line comments are supported
+  */
+*/
+```
+
+### Documentation Comments
+
+Special comments generate documentation:
+
+```kanagawa
+//| Read a 32-bit word from memory at an aligned address.
+// This is more efficient than unaligned reads.
+inline int_t aligned_read
+    ( hart_index_t hid  //< Hart index
+    , uint_t addr       //< Memory address (must be 32-bit aligned)
+    )
+{
+    return mem_read_aligned(hid, addr);
+}
+```
+
+- `//|` documents the following declaration
+- `//<` documents the preceding declaration (useful for parameters)
+
+## Identifiers
+
+Valid identifiers:
+- Start with letter or underscore
+- Contain letters, digits, underscores
+- Case-sensitive
+
+```kanagawa
+uint32 myVariable;    // Valid
+uint32 _internal;     // Valid (by convention, private)
+uint32 value2;        // Valid
+// uint32 2value;     // Invalid: starts with digit
+```
+
+## Keywords
+
+Reserved keywords:
+
+```
+auto        bool        break       case        cast        class
+const       continue    default     do          else        enum
+export      extern      false       float32     for         if
+import      inline      int         module      optional    return
+static      struct      switch      template    true        typename
+uint        union       using       void        while
+```
+
+## Operators
+
+Kanagawa supports standard operators with hardware-specific semantics.
+
+### Arithmetic Operators
+
+```kanagawa
+uint32 a = 10;
+uint32 b = 3;
+
+auto sum = a + b;        // Addition
+auto diff = a - b;       // Subtraction
+auto product = a * b;    // Multiplication
+auto quotient = a / b;   // Division (power-of-2 only or compile-time)
+auto remainder = a % b;  // Modulo (power-of-2 only or compile-time)
+```
+
+<Warning>
+Division and modulo are only supported if computable at compile time or if the divisor is a power of 2.
+</Warning>
+
+### Bitwise Operators
+
+```kanagawa
+uint8 x = 0b11110000;
+uint8 y = 0b10101010;
+
+auto and_result = x & y;    // Bitwise AND: 0b10100000
+auto or_result = x | y;     // Bitwise OR:  0b11111010
+auto xor_result = x ^ y;    // Bitwise XOR: 0b01011010
+auto not_result = ~x;       // Bitwise NOT: 0b00001111
+auto left = x << 2;         // Left shift:  0b11000000
+auto right = x >> 2;        // Right shift: 0b00111100
+```
+
+<Note>
+Right shifts are arithmetic (sign-extending) for signed types and logical (zero-filling) for unsigned types.
+</Note>
+
+### Logical Operators
+
+```kanagawa
+bool a = true;
+bool b = false;
+
+auto and_result = a && b;   // Logical AND: false
+auto or_result = a || b;    // Logical OR:  true
+auto xor_result = a ^^ b;   // Logical XOR: true
+auto not_result = !a;       // Logical NOT: false
+```
+
+### Comparison Operators
+
+```kanagawa
+uint32 x = 5;
+uint32 y = 10;
+
+bool eq = (x == y);    // Equal:              false
+bool ne = (x != y);    // Not equal:          true
+bool lt = (x < y);     // Less than:          true
+bool le = (x <= y);    // Less or equal:      true
+bool gt = (x > y);     // Greater than:       false
+bool ge = (x >= y);    // Greater or equal:   false
+```
+
+### Increment/Decrement
+
+```kanagawa
+uint32 counter = 0;
+
+counter++;    // Post-increment: counter = counter + 1
+counter--;    // Post-decrement: counter = counter - 1
+```
+
+### Ternary Operator
+
+```kanagawa
+bool condition;
+uint32 a = 5;
+uint32 b = 10;
+
+uint32 result = condition ? a : b;  // Select based on condition
+```
+
+### Sizeof Operators
+
+```kanagawa
+uint32 x;
+
+const auto bit_size = bitsizeof x;        // 32
+const auto byte_size = bytesizeof x;      // 4
+const auto type_size = bitsizeof uint32;  // 32
+```
+
+### Offset Operators
+
+```kanagawa
+struct Data
+{
+    uint64 header;
+    uint16 value;
+}
+
+const auto offset_bits = bitoffsetof(Data, value);   // 64
+const auto offset_bytes = byteoffsetof(Data, value); // 8
+```
+
+## Literals
+
+### Integer Literals
+
+```kanagawa
+// Decimal
+auto dec = 77;
+
+// Hexadecimal
+auto hex = 0x4D;
+
+// Octal
+auto oct = 0o115;
+
+// Binary
+auto bin = 0b01001101;
+
+// With underscores for readability
+auto readable = 1_000_000;
+auto bits = 0b_1111_0000_1010;
+```
+
+### Typed Literals
+
+```kanagawa
+// Inferred type (minimum width)
+auto x = 10;        // uint4
+
+// Explicit type with suffix
+auto y = 10u8;      // uint8
+auto z = 10_i16;    // int16 (underscore optional)
+
+// Error: value out of range
+// auto bad = 10_i4;   // Error: 10 doesn't fit in i4
+```
+
+### Boolean Literals
+
+```kanagawa
+bool flag = true;
+bool disabled = false;
+```
+
+### Floating-Point Literals
+
+```kanagawa
+float32 pi = 3.14159;
+float32 euler = 2.71828;
+float32 scientific = 1.5e-10;
+```
+
+<Note>
+Unlike C, Kanagawa doesn't support `f` or `F` suffix for float literals.
+</Note>
+
+### String Literals
+
+```kanagawa
+string message = "Hello, Kanagawa!";
+string path = "C:\\Users\\data.txt";  // Escape backslash
+```
+
+#### String Interpolation
+
+```kanagawa
+uint16 value = 0xf00;
+
+"{value}";          // "3840" (decimal)
+"{value:x}";        // "0f00" (hex)
+"{value:x3}";       // "f00" (hex, 3 digits)
+"{value + 3,10}";   // "      3843" (right-aligned)
+"{value + 3,-10}";  // "3843      " (left-aligned)
+"{2+2=}";           // "(2 + 2) = 4" (expression)
+"{{val}}";          // "{val}" (escaped braces)
+```
+
+Format specifiers:
+- `b` - binary
+- `d` - decimal (default)
+- `o` - octal
+- `x` - lowercase hexadecimal
+- `X` - uppercase hexadecimal
+
+## Scope and Lifetime
+
+### Blocks
+
+```kanagawa
+inline void Example()
+{
+    uint32 outer = 10;
+    
+    {
+        uint32 inner = 20;
+        println("{outer}");  // OK: 10
+        println("{inner}");  // OK: 20
+    }
+    
+    // println("{inner}");  // Error: inner out of scope
+}
+```
+
+### Shadowing
+
+```kanagawa
+inline void Shadowing()
+{
+    uint32 x = 5;
+    println("{x}");  // 5
+    
+    {
+        uint32 x = 10;  // Shadows outer x
+        println("{x}");  // 10
+    }
+    
+    println("{x}");  // 5 (outer x)
+}
+```
+
+## Modules
+
+Modules organize code and control exports:
+
+```kanagawa
+module math.functions
+    { Add
+    , Multiply
+    }
+
+inline uint32 Add(uint32 a, uint32 b)
+{
+    return a + b;
+}
+
+inline uint32 Multiply(uint32 a, uint32 b)
+{
+    return a * b;
+}
+
+// Not exported
+inline uint32 Helper(uint32 x)
+{
+    return x * 2;
+}
+```
+
+Using modules:
+
+```kanagawa
+import math.functions
+
+inline void UseModule()
+{
+    uint32 sum = Add(5, 3);        // OK
+    uint32 product = Multiply(4, 7); // OK
+    // uint32 x = Helper(2);       // Error: not exported
+}
+```
+
+## Attributes
+
+Attributes provide compiler hints:
+
+```kanagawa
+// Function attributes
+[[async]] void AsyncFunction() { }
+[[pipelined]] uint32 Pipelined(uint32 x) { return x; }
+[[unordered]] uint32 Unordered(uint32 x) { return x; }
+[[thread_rate(4)]] void LowerRate() { }
+
+// Variable attributes
+[[non_replicated]]
+memory<uint32, 256> shared_mem;
+
+// Parameter attributes
+void Function([[last]] bool is_last) { }
+
+// Block attributes
+[[schedule(4)]]
+{
+    // At most 4 threads here
+}
+
+// Loop attributes
+[[unordered]]
+for (uint32 i : count)
+{
+    // Iterations can complete out of order
+}
+```
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="Use Meaningful Names">
+    ```kanagawa
+    // Good
+    uint32 packet_count;
+    bool is_valid;
+    
+    // Avoid
+    uint32 pc;
+    bool f;
+    ```
+  </Accordion>
+  
+  <Accordion title="Follow Naming Conventions">
+    ```kanagawa
+    // Classes: PascalCase
+    class PacketProcessor { }
+    
+    // Functions: PascalCase or camelCase
+    void ProcessPacket() { }
+    void processPacket() { }
+    
+    // Variables: snake_case or camelCase
+    uint32 packet_size;
+    uint32 packetSize;
+    
+    // Private members: leading underscore
+    class Foo
+    {
+    private:
+        uint32 _internal_state;
+    }
+    
+    // Constants: UPPER_CASE or PascalCase
+    const auto BUFFER_SIZE = 1024;
+    const auto BufferSize = 1024;
+    ```
+  </Accordion>
+  
+  <Accordion title="Use auto for Complex Types">
+    ```kanagawa
+    // Verbose
+    optional<uint32>[8] results = compute();
+    
+    // Better
+    auto results = compute();
+    ```
+  </Accordion>
+  
+  <Accordion title="Add Documentation Comments">
+    ```kanagawa
+    //| Processes incoming data packets.
+    //
+    // Returns the number of packets successfully processed.
+    // Drops malformed packets.
+    uint32 ProcessPackets
+        ( uint8[1024] data  //< Input packet data
+        , uint16 length     //< Length of valid data in bytes
+        )
+    {
+        // Implementation
+    }
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Related Topics
+
+<CardGroup cols={2}>
+  <Card title="Types" icon="shapes" href="/language/types">
+    Integer, boolean, struct, union, and array types
+  </Card>
+  <Card title="Functions" icon="function" href="/language/functions">
+    Function declaration and invocation
+  </Card>
+  <Card title="Classes" icon="cube" href="/language/classes">
+    Object-oriented hardware design
+  </Card>
+  <Card title="Control Flow" icon="code-branch" href="/language/control-flow">
+    Conditionals, loops, and control structures
+  </Card>
+</CardGroup>

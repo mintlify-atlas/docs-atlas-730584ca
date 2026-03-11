@@ -1,0 +1,478 @@
+---
+title: 'Memory Model'
+description: 'Wavefront consistency and shared state management'
+---
+
+## Wavefront Consistency
+
+Kanagawa's memory model is called **wavefront consistency**. It's designed to align with synchronous circuit semantics, making concurrent hardware behavior predictable and easy to reason about.
+
+<Note>
+Wavefront consistency eliminates many synchronization issues common in traditional concurrent programming while maintaining the performance benefits of parallel execution.
+</Note>
+
+## Memory Model Principles
+
+### 1. Thread Ordering
+
+Threads execute in a deterministic order:
+- If Thread A enters a function before Thread B, then A's effects are visible to B
+- Shared state modifications by Thread A are guaranteed to be visible to Thread B
+
+### 2. Atomic Operations
+
+Operations within an `atomic` block appear instantaneous to other threads:
+
+```kanagawa
+class AtomicExample
+{
+private:
+    uint32 _x = 0;
+    uint32 _y = 0;
+
+public:
+    void Update(uint32 value)
+    {
+        atomic
+        {
+            // Both updates happen "at once"
+            _x = value;
+            _y = value * 2;
+        }
+        // Other threads never see inconsistent state
+    }
+}
+```
+
+### 3. Pipeline Visibility
+
+Values written to shared state become visible to subsequent threads at well-defined pipeline boundaries.
+
+## Shared State
+
+Kanagawa distinguishes between local and shared state:
+
+### Local Variables
+
+Local variables are thread-private and require no synchronization:
+
+```kanagawa
+inline uint32 Process(uint32 x)
+{
+    // Each thread has its own copy of y
+    uint32 y = x + 5;
+    uint32 z = y * 2;
+    return z;
+}
+```
+
+### Class Members (Shared)
+
+Class data members are shared across all threads:
+
+```kanagawa
+class SharedCounter
+{
+private:
+    uint32 _count = 0;  // Shared across all threads
+
+public:
+    void Increment()
+    {
+        atomic
+        {
+            _count++;  // Requires synchronization
+        }
+    }
+}
+```
+
+### Static Locals (Shared)
+
+Static local variables are also shared:
+
+```kanagawa
+inline uint32 GetNextId()
+{
+    atomic
+    {
+        static uint32 _next_id = 0;  // Shared
+        uint32 result = _next_id;
+        _next_id++;
+        return result;
+    }
+}
+```
+
+## Synchronization Primitives
+
+### Atomic Blocks
+
+Guarantee exclusive access to shared state:
+
+```kanagawa
+class BankAccount
+{
+private:
+    uint32 _balance = 1000;
+
+public:
+    bool Withdraw(uint32 amount)
+    {
+        bool success = false;
+        
+        atomic
+        {
+            if (_balance >= amount)
+            {
+                _balance -= amount;
+                success = true;
+            }
+        }
+        
+        return success;
+    }
+}
+```
+
+<Warning>
+Without `atomic`, concurrent withdrawals could corrupt the balance.
+</Warning>
+
+### Scheduled Blocks
+
+Limit concurrent access with `[[schedule(N)]]`:
+
+```kanagawa
+class MemoryController
+{
+private:
+    memory<uint32, 1024> _mem;
+
+public:
+    uint32 Read(uint16 addr)
+    {
+        // At most 2 threads accessing memory simultaneously
+        [[schedule(2)]]
+        {
+            return _mem[addr];
+        }
+    }
+}
+```
+
+The compiler ensures:
+- No more than N threads in the block at once
+- Proper scheduling to meet this constraint
+- Optimization of register usage within the constraint
+
+### Atomic Do Loops
+
+Block until a condition is satisfied:
+
+```kanagawa
+class Producer
+{
+private:
+    uint32 _buffer_count = 0;
+    const uint32 MAX_BUFFER = 10;
+
+public:
+    void Produce(uint32 data)
+    {
+        // Wait for space
+        atomic do {} while (_buffer_count >= MAX_BUFFER);
+        
+        atomic
+        {
+            // Store data
+            _buffer_count++;
+        }
+    }
+}
+```
+
+## Data Races
+
+Kanagawa helps prevent data races, but you must be aware of potential issues:
+
+### Safe: Single Write Location
+
+```kanagawa
+class SafeCounter
+{
+private:
+    uint32 _sum = 0;
+
+public:
+    void Add(uint32 value)
+    {
+        atomic
+        {
+            // Only one place writes to _sum
+            _sum += value;
+        }
+    }
+    
+    uint32 GetSum()
+    {
+        // Safe to read
+        return _sum;
+    }
+}
+```
+
+### Unsafe: Multiple Writes
+
+```kanagawa
+class UnsafeCounter
+{
+private:
+    uint32 _value = 0;
+
+public:
+    void ConditionalUpdate(bool reset, uint32 new_val)
+    {
+        // DATA RACE: Multiple writes to _value
+        if (reset)
+        {
+            atomic { _value = 0; }  // Write location 1
+        }
+        else
+        {
+            atomic { _value = new_val; }  // Write location 2
+        }
+    }
+}
+```
+
+<Warning>
+Multiple write locations to the same shared variable require careful analysis to ensure no data races occur.
+</Warning>
+
+### Fixing Multiple Writes
+
+Refactor to a single write location:
+
+```kanagawa
+class SafeCounter
+{
+private:
+    uint32 _value = 0;
+
+public:
+    void ConditionalUpdate(bool reset, uint32 new_val)
+    {
+        // Single write location
+        atomic
+        {
+            _value = reset ? 0 : new_val;
+        }
+    }
+}
+```
+
+## Memory vs Arrays
+
+Kanagawa provides both arrays and memories with different semantics:
+
+### Arrays
+
+```kanagawa
+uint32[8] array;  // Can be copied and passed by value
+array[3] = 10;    // Concurrent writes are safe
+```
+
+**Properties:**
+- Can be copied and passed by value
+- Concurrent writes to different indices are safe
+- Implemented as registers or combinational logic
+
+### Memories
+
+```kanagawa
+class MemoryExample
+{
+    memory<uint32, 8> mem;  // Cannot be copied
+    
+    void Access()
+    {
+        mem[3] = 10;  // Concurrent writes cause data races
+    }
+}
+```
+
+**Properties:**
+- Cannot be copied or passed by value
+- Concurrent writes (even to different addresses) may cause data races
+- Implemented as block RAM or registers
+
+<Note>
+Use `memory_rep` (replicated memory) to allow concurrent reads without arbitration.
+</Note>
+
+### Memory Replication
+
+By default, each read statement gets its own memory replica:
+
+```kanagawa
+class ReplicatedReads
+{
+    memory<uint32, 256> mem;  // Replicated by default
+    
+    uint32 Read1(uint8 addr) { return mem[addr]; }  // Replica 1
+    uint32 Read2(uint8 addr) { return mem[addr]; }  // Replica 2
+}
+```
+
+Use `[[non_replicated]]` to share a single copy:
+
+```kanagawa
+class SharedReads
+{
+    [[non_replicated]]
+    memory<uint32, 256> mem;  // Single copy, arbiter for reads
+    
+    uint32 Read1(uint8 addr) { return mem[addr]; }
+    uint32 Read2(uint8 addr) { return mem[addr]; }
+}
+```
+
+## Best Practices
+
+<Steps>
+  <Step title="Minimize Shared State">
+    Write functions that only use local variables whenever possible:
+    
+    ```kanagawa
+    // Ideal: No shared state
+    inline uint32 Pure(uint32 a, uint32 b)
+    {
+        return a + b;  // No synchronization needed
+    }
+    ```
+  </Step>
+  
+  <Step title="Use Atomic Blocks Correctly">
+    Keep atomic blocks small and focused:
+    
+    ```kanagawa
+    // Good: Minimal atomic section
+    uint32 result = compute_locally(x);
+    atomic { _shared = result; }
+    
+    // Bad: Unnecessary computation in atomic
+    atomic {
+        _shared = expensive_computation(x);
+    }
+    ```
+  </Step>
+  
+  <Step title="Avoid Complex Shared State">
+    Minimize the number of shared variables and write locations:
+    
+    ```kanagawa
+    // Complex: Multiple shared variables
+    atomic {
+        _x = compute_x();
+        _y = compute_y();
+        _z = compute_z();
+    }
+    
+    // Simpler: Single shared variable
+    struct State { uint32 x; uint32 y; uint32 z; }
+    atomic { _state = new_state; }
+    ```
+  </Step>
+  
+  <Step title="Verify No Data Races">
+    For each shared variable, verify:
+    - How many write locations exist?
+    - Can multiple threads write concurrently?
+    - Are atomic blocks used correctly?
+    - For memories: Can concurrent reads occur?
+  </Step>
+</Steps>
+
+## Shared State Complexity Levels
+
+From simplest to most complex:
+
+### Level 0: No Shared State ⭐
+
+```kanagawa
+inline uint32 Simple(uint32 x)
+{
+    return x * 2;  // Pure function
+}
+```
+
+**Benefits:** No synchronization, highest clock frequency
+
+### Level 1: Single Atomic Block ⭐⭐
+
+```kanagawa
+inline uint32 Accumulate(uint32 value)
+{
+    atomic
+    {
+        static uint32 _sum = 0;
+        _sum += value;
+        return _sum;
+    }
+}
+```
+
+**Verification:** Check initial value and atomic block logic
+
+### Level 2: Single Write Location ⭐⭐⭐
+
+```kanagawa
+class Counter
+{
+private:
+    uint32 _count = 0;
+
+public:
+    void Increment() { atomic { _count++; } }
+    uint32 Get() { return _count; }
+}
+```
+
+**Verification:** Confirm only one statement writes to `_count`
+
+### Level 3: Multiple Write Locations ⭐⭐⭐⭐
+
+```kanagawa
+inline void Complex()
+{
+    static bool _flag = false;
+    
+    atomic { if (!_flag) _flag = true; }   // Write 1
+    // ... code ...
+    atomic { if (condition) _flag = false; } // Write 2
+}
+```
+
+**Verification:** Prove no concurrent writes possible
+
+<Warning>
+Strive to keep most code at Levels 0-2 for maintainability and verification.
+</Warning>
+
+## Related Topics
+
+<CardGroup cols={2}>
+  <Card title="Wavefront Threading" icon="wave-pulse" href="/concepts/wavefront-threading">
+    How threads execute in order
+  </Card>
+  <Card title="Concurrency Patterns" icon="arrows-split-up-and-left" href="/concepts/concurrency">
+    Safe parallel programming patterns
+  </Card>
+  <Card title="Memory Types" icon="database" href="/language/memory">
+    Detailed memory type reference
+  </Card>
+  <Card title="Effective Kanagawa" icon="star" href="/best-practices/effective-kanagawa">
+    Best practices for shared state
+  </Card>
+</CardGroup>

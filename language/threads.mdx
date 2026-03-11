@@ -1,0 +1,43 @@
+---
+title:'Threads'
+description:'Thread operations and primitives'
+---
+
+## pipelined_for
+
+Create parallel threads:
+
+```kanagawa
+pipelined_for(8, [](uint32 tid)
+{
+    process_data(tid);
+});
+```
+
+## async_exec
+
+Spawn independent threads:
+
+```kanagawa
+async_exec([]()
+{
+    background_work();
+});
+```
+
+## Thread Synchronization
+
+```kanagawa
+atomic
+{
+    static uint32 _shared;
+    _shared++;
+}
+```
+
+## Related Topics
+
+<CardGroup cols={2}>
+<Card title="Wavefront Threading" href="/concepts/wavefront-threading">Threading model</Card>
+<Card title="Concurrency" href="/concepts/concurrency">Parallel patterns</Card>
+</CardGroup>

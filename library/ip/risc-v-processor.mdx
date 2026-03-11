@@ -1,0 +1,171 @@
+---
+title: RISC-V Processor
+description: Configurable RV32I soft-core processor
+---
+
+The `processor.risc_v` module provides a RISC-V RV32I soft-core processor with optional M extension support.
+
+## Overview
+
+The RISC-V core implements RV32I base ISA with multi-hart support, Memory Mapped IO, external memory fetch, and custom instruction support.
+
+```kanagawa
+import processor.risc_v
+
+const auto HARTS = 1;
+const auto IMEM_LENGTH = 0x4000;
+const auto DMEM_LENGTH = 0x2000;
+
+using RV = RISC_V<HARTS, IMEM_LENGTH, DMEM_LENGTH>;
+
+class MyCore {
+    RV core;
+    
+public:
+    void start() {
+        core.init_stack_pointers(0x5FF0, 0x300);
+        core.start({0});
+    }
+}
+```
+
+## Template Parameters
+
+```kanagawa
+template<
+    auto HARTS,                      // Number of harts (1, 2, or 4)
+    auto IMEM_LENGTH,                // Instruction memory size (words)
+    auto DMEM_LENGTH,                // Data memory size (bytes)
+    auto MMIO_LENGTH = 0,            // MMIO size (bytes)
+    auto IMEM_ORIGIN = 0,            // Instruction memory start
+    auto DMEM_ORIGIN = ...,          // Data memory start
+    auto MMIO_ORIGIN = ...,          // MMIO start
+    auto IMEM_TCM_SIZE = IMEM_LENGTH,// Internal instruction TCM size
+    template<typename, auto> typename Memory = memory_norep,
+    auto EXTENSIONS = Extension::None,
+    auto CONFIG = Optimize::Area,
+    Base ISA = Base::RV32I,
+    auto BTB_SIZE = 1024
+>
+class RISC_V
+```
+
+### Key Parameters
+
+<ParamField path="HARTS" type="auto">
+  Number of hardware threads (1, 2, or 4)
+</ParamField>
+
+<ParamField path="IMEM_LENGTH" type="auto">
+  Instruction memory size in 32-bit words
+</ParamField>
+
+<ParamField path="DMEM_LENGTH" type="auto">
+  Data memory size in bytes
+</ParamField>
+
+<ParamField path="EXTENSIONS" type="auto" default="Extension::None">
+  ISA extensions (Extension::M for multiply instructions)
+</ParamField>
+
+<ParamField path="Memory" type="template" default="memory_norep">
+  Memory implementation template
+</ParamField>
+
+## Methods
+
+### `start(pc_init)`
+
+Start processor execution with initial program counter values.
+
+```kanagawa
+core.start({0x00000000});  // Start at address 0
+```
+
+### `stop()`
+
+Request processor to stop execution.
+
+```kanagawa
+core.stop();
+atomic do; while(core.is_running());
+```
+
+### `init_stack_pointers(stack_start, stack_size)`
+
+Initialize stack pointers for all harts.
+
+```kanagawa
+core.init_stack_pointers(0x5FF0, 0x300);
+```
+
+### Memory Access
+
+**Instruction Memory:**
+```kanagawa
+core.imem_write(addr, instruction);
+```
+
+**Data Memory:**
+```kanagawa
+auto data = core.dmem_read(hart_id, addr);
+core.dmem_write(hart_id, addr, data, size);
+```
+
+## Configuration
+
+### Multi-Hart
+
+```kanagawa
+// 2-hart configuration
+using RV = RISC_V<2, 0x1000, 0x2000>;
+
+core.init_stack_pointers(0x1FF0, 0x100);
+core.start({0x0000, 0x0000});  // Both harts start at address 0
+```
+
+### MMIO
+
+```kanagawa
+using RV = RISC_V<1, 0x1000, 0x1000, 0x100>;
+
+RV core = {
+    .mmio_load = [](hart_index_t hid, uint_t addr, MemorySize size, bool sign) {
+        return read_peripheral(addr);
+    },
+    .mmio_store = [](hart_index_t hid, uint_t addr, MemorySize size, int_t value) {
+        write_peripheral(addr, value);
+        return true;
+    }
+};
+```
+
+### Custom Instructions
+
+```kanagawa
+RV core = {
+    .custom_decode = [](RVG opcode) {
+        return opcode == RVG::custom_0 ? Format::R : Format::Invalid;
+    },
+    .custom_execute = [](hart_index_t hid, RVG opcode, Funct3 funct3, 
+                         int_t op1, int_t op2, int_t imm, Funct7 funct7) {
+        return op1 + op2;  // Custom add
+    }
+};
+```
+
+## Features
+
+- **RV32I Base ISA** with optional M extension
+- **Multi-hart support** (1, 2, or 4 harts)
+- **5-stage pipeline** with dynamic branch prediction
+- **Memory Mapped IO** with callbacks
+- **External instruction fetch** for large programs
+- **Custom instructions** via decode/execute callbacks
+- **System traps** (ECALL, EBREAK, exceptions)
+- **Instruction trace** for debugging
+
+## See Also
+
+- [Memories](/library/data/memories) - Memory configurations
+- User Guide: Full details in `processor/risc_v/user-guide.md`

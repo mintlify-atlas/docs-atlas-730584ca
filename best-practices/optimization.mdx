@@ -1,0 +1,60 @@
+---
+title:'Optimization'
+description:'Performance optimization techniques'
+---
+
+## Area Optimization
+
+### Minimize Basic Blocks
+
+Use inline functions:
+
+```kanagawa
+// Better: No overhead
+inline uint32 Add(uint32 a, uint32 b)
+{
+    return a + b;
+}
+```
+
+### Reduce Mux Width
+
+```kanagawa
+// Before
+if (condition) counter++;
+
+// After
+uint1 inc = cast<uint1>(condition);
+counter += inc;
+```
+
+## Frequency Optimization
+
+### Decompose Atomic Blocks
+
+```kanagawa
+// Split into smaller atomic regions
+atomic { /* Part 1 */ }
+atomic { /* Part 2 */ }
+```
+
+### Pipeline Wide Operations
+
+Use `--carry-chain-width` to break wide adders
+
+## Compiler Flags
+
+```bash
+# Area reduction
+kanagawa --register-ratio=1.5 --mem-to-reg=1000
+
+# Frequency improvement  
+kanagawa --register-ratio=2.0 --carry-chain-width=16
+```
+
+## Related Topics
+
+<CardGroup cols={2}>
+<Card title="Compiler Options" href="/compiler/options">All compiler flags</Card>
+<Card title="Mapping" href="/concepts/mapping-to-hardware">Hardware generation</Card>
+</CardGroup>

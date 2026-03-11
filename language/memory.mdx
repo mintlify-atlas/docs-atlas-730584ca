@@ -1,0 +1,38 @@
+---
+title:'Memory'
+description:'Arrays, memories, and storage'
+---
+
+## Arrays
+
+```kanagawa
+uint32[8] data;
+data[3] = 100;
+```
+
+## Memories
+
+```kanagawa
+class Storage
+{
+    memory<uint32, 1024> mem;
+    
+    uint32 Read(uint16 addr)
+    {
+        return mem[addr];
+    }
+}
+```
+
+## Memory Types
+
+- `memory<T, N>` - Replicated reads
+- `memory_norep<T, N>` - Single copy
+- `memory_ecc<T, N>` - Error correction
+
+## Related Topics
+
+<CardGroup cols={2}>
+<Card title="Types" href="/language/types">Type system</Card>
+<Card title="Memory Model" href="/concepts/memory-model">Consistency model</Card>
+</CardGroup>

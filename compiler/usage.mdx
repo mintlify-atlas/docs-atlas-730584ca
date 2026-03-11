@@ -1,0 +1,58 @@
+---
+title:'Compiler Usage'
+description:'Using the Kanagawa compiler'
+---
+
+## Basic Compilation
+
+```bash
+kanagawa design.k -o output_dir
+```
+
+## Common Options
+
+```bash
+# Specify output directory
+kanagawa design.k -o build/
+
+# Set optimization level
+kanagawa design.k --optimize=2
+
+# Target specific device
+kanagawa design.k --device=stratix10
+
+# Enable warnings
+kanagawa design.k --Wall
+```
+
+## Build Targets
+
+```bash
+# Generate Verilog
+kanagawa design.k --target=verilog
+
+# Generate C++ simulation
+kanagawa design.k --target=cpp
+
+# Run tests
+ctest --verbose -R "^library\\."  
+```
+
+## Project Structure
+
+```
+project/
+  src/
+    main.k
+    processor.k
+  build/
+    output.v
+    reports/
+```
+
+## Related Topics
+
+<CardGroup cols={2}>
+<Card title="Compiler Options" href="/compiler/options">All flags</Card>
+<Card title="Installation" href="/installation">Setup guide</Card>
+</CardGroup>

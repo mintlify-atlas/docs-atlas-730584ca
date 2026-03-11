@@ -1,0 +1,33 @@
+---
+title: Complex Numbers
+description: Complex number arithmetic
+---
+
+The `numeric.complex` module provides complex number support.
+
+## Type Definition
+
+```kanagawa
+struct complex<typename T> {
+    T real_part;
+    T imag_part;
+}
+```
+
+## Usage
+
+```kanagawa
+import numeric.complex
+import numeric.fixed
+
+complex<fixed<16, 16>> c;
+c.real_part = {0x00010000};  // 1.0
+c.imag_part = {0x00008000};  // 0.5
+
+// c represents 1.0 + 0.5i
+```
+
+## See Also
+
+- [Fixed-Point](/library/numeric/fixed-point) - Use with fixed-point
+- [Floating-Point](/library/numeric/floating-point) - Use with floating-point

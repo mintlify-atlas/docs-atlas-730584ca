@@ -1,0 +1,58 @@
+---
+title:'Classes'
+description:'Object-oriented hardware design'
+---
+
+## Class Definition
+
+```kanagawa
+class Counter
+{
+private:
+    uint32 _count = 0;
+
+public:
+    uint32 Increment()
+    {
+        atomic { _count++; }
+        return _count;
+    }
+}
+```
+
+## Exported Classes
+
+Become Verilog modules:
+
+```kanagawa
+class Processor
+{
+public:
+    uint32 Execute(uint32 instruction);
+}
+
+export Processor;
+```
+
+## Callbacks
+
+```kanagawa
+class EventHandler
+{
+private:
+    (uint32) -> void on_event;
+
+public:
+    void Trigger(uint32 data)
+    {
+        on_event(data);
+    }
+}
+```
+
+## Related Topics
+
+<CardGroup cols={2}>
+<Card title="Functions" href="/language/functions">Methods</Card>
+<Card title="Export" href="/compiler/code-generation">Verilog generation</Card>
+</CardGroup>

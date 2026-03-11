@@ -1,0 +1,531 @@
+---
+title: "Cryptographic Accelerator"
+description: "Build an AES encryption accelerator with CRC computation"
+---
+
+## Overview
+
+This example demonstrates building cryptographic hardware accelerators using Kanagawa's library components and custom logic. We'll implement AES-like encryption and use the CRC calculator from the standard library.
+
+## CRC Calculator Example
+
+Kanagawa includes a high-performance CRC calculator in the standard library:
+
+```kanagawa crc_example.k
+import base
+import codec.crc
+
+// CRC-32 calculator for network packet processing
+class PacketCRC
+{
+private:
+    const auto MAX_PACKET_SIZE = 1500;  // MTU
+    const auto CRC_THREADS = 4;         // 4 simultaneous streams
+    
+    // CRC-32 with standard Ethernet polynomial
+    crc_calculator<
+        32,                 // 32-bit CRC
+        0xEDB88320,         // Reversed polynomial
+        0xFFFFFFFF,         // Initial value
+        0xFFFFFFFF,         // XOR output
+        true,               // Reflect input
+        true,               // Reflect output
+        64,                 // 64 bytes per cycle
+        CRC_THREADS         // 4 parallel streams
+    > _crc;
+
+public:
+    // Compute CRC for a packet
+    uint32 compute_crc(
+        count_t<CRC_THREADS> stream_id,
+        uint8[64] data_chunk,
+        count_t<64> valid_bytes,
+        bool first_chunk
+    )
+    {
+        return _crc.compute(
+            stream_id,
+            data_chunk,
+            valid_bytes,
+            first_chunk
+        );
+    }
+    
+    void main()
+    {
+        // Process multiple streams in parallel
+        uint8[64] chunk = {};
+        
+        // Example: Process 4 independent packet streams
+        static for (const auto i : CRC_THREADS)
+        {
+            uint32 crc_value = compute_crc(i, chunk, 64, false);
+        }
+    }
+}
+
+export PacketCRC;
+```
+
+## Understanding the CRC Calculator
+
+<Steps>
+  <Step title="Import the CRC module">
+    ```kanagawa
+    import codec.crc
+    ```
+
+    The `codec.crc` module provides the `crc_calculator` template class.
+  </Step>
+
+  <Step title="Configure CRC parameters">
+    Template parameters specify the CRC algorithm:
+
+    ```kanagawa
+    crc_calculator<
+        32,                 // CRC width in bits
+        0xEDB88320,         // Reversed polynomial
+        0xFFFFFFFF,         // Initial value
+        0xFFFFFFFF,         // XOR with output
+        true,               // Reflect input bits
+        true,               // Reflect output bits
+        64,                 // Max bytes per call
+        4                   // Concurrent CRC computations
+    > _crc;
+    ```
+
+    <Info>
+      Common CRC algorithms (CRC-16, CRC-32, CRC-64) can be configured by adjusting these parameters.
+    </Info>
+  </Step>
+
+  <Step title="Process data chunks">
+    Call `compute()` with data chunks:
+
+    ```kanagawa
+    uint32 result = _crc.compute(
+        stream_id,      // Which of N parallel streams
+        data_chunk,     // Input data bytes
+        valid_bytes,    // How many bytes are valid
+        reset           // true = start new CRC computation
+    );
+    ```
+
+    Set `reset` to `true` on the first chunk of a new data stream.
+  </Step>
+</Steps>
+
+## Custom AES-Style Encryption
+
+Here's a simplified AES-like encryption accelerator:
+
+```kanagawa aes_accelerator.k
+import base
+import data.bits
+
+// Simplified AES-like block cipher accelerator
+class BlockCipher
+{
+private:
+    const auto ROUNDS = 10;
+    const auto BLOCK_SIZE = 16;  // 128 bits = 16 bytes
+    
+    // Simplified S-box (in real AES, this is more complex)
+    inline uint8 sbox(uint8 input)
+    {
+        // Simple non-linear substitution
+        // Real AES uses a mathematically defined S-box
+        const uint8[256] sbox_table = generate_sbox();
+        return sbox_table[input];
+    }
+    
+    inline uint8[256] generate_sbox()
+    {
+        uint8[256] table;
+        static for (const auto i : 256)
+        {
+            // Simplified substitution (not cryptographically secure)
+            uint8 val = i;
+            val = (val << 1) | (val >> 7);  // Rotate left
+            val = val ^ 0x63;                // XOR with constant
+            table[i] = val;
+        }
+        return table;
+    }
+    
+    // Mix columns operation
+    inline uint32 mix_columns(uint32 input)
+    {
+        // Extract bytes
+        uint8 b0 = static_cast<uint8>(input);
+        uint8 b1 = static_cast<uint8>(input >> 8);
+        uint8 b2 = static_cast<uint8>(input >> 16);
+        uint8 b3 = static_cast<uint8>(input >> 24);
+        
+        // Galois field multiplication (simplified)
+        uint8 c0 = galois_mul2(b0) ^ galois_mul3(b1) ^ b2 ^ b3;
+        uint8 c1 = b0 ^ galois_mul2(b1) ^ galois_mul3(b2) ^ b3;
+        uint8 c2 = b0 ^ b1 ^ galois_mul2(b2) ^ galois_mul3(b3);
+        uint8 c3 = galois_mul3(b0) ^ b1 ^ b2 ^ galois_mul2(b3);
+        
+        return concat(c3, c2, c1, c0);
+    }
+    
+    // Galois field multiplication by 2
+    inline uint8 galois_mul2(uint8 x)
+    {
+        uint8 result = x << 1;
+        if ((x & 0x80) != 0)
+        {
+            result ^= 0x1B;  // Reduction polynomial
+        }
+        return result;
+    }
+    
+    // Galois field multiplication by 3
+    inline uint8 galois_mul3(uint8 x)
+    {
+        return galois_mul2(x) ^ x;
+    }
+    
+    // Key schedule (simplified)
+    inline uint32[ROUNDS + 1][4] expand_key(uint32[4] key)
+    {
+        uint32[ROUNDS + 1][4] round_keys;
+        round_keys[0] = key;
+        
+        static for (const auto round : ROUNDS)
+        {
+            static for (const auto i : 4)
+            {
+                uint32 temp = round_keys[round][(i + 3) % 4];
+                temp = rotate_word(temp);
+                temp = sub_word(temp);
+                temp ^= rcon(round);
+                
+                round_keys[round + 1][i] = 
+                    round_keys[round][i] ^ temp;
+            }
+        }
+        
+        return round_keys;
+    }
+    
+    inline uint32 rotate_word(uint32 word)
+    {
+        return (word << 8) | (word >> 24);
+    }
+    
+    inline uint32 sub_word(uint32 word)
+    {
+        uint8 b0 = sbox(static_cast<uint8>(word));
+        uint8 b1 = sbox(static_cast<uint8>(word >> 8));
+        uint8 b2 = sbox(static_cast<uint8>(word >> 16));
+        uint8 b3 = sbox(static_cast<uint8>(word >> 24));
+        return concat(b3, b2, b1, b0);
+    }
+    
+    inline uint32 rcon(count_t<ROUNDS> round)
+    {
+        const uint32[ROUNDS] rcon_table = {
+            0x01000000, 0x02000000, 0x04000000, 0x08000000,
+            0x10000000, 0x20000000, 0x40000000, 0x80000000,
+            0x1B000000, 0x36000000
+        };
+        return rcon_table[round];
+    }
+
+public:
+    // Encrypt a 128-bit block
+    uint32[4] encrypt(uint32[4] plaintext, uint32[4] key)
+    {
+        uint32[4] state = plaintext;
+        uint32[ROUNDS + 1][4] round_keys = expand_key(key);
+        
+        // Initial round key addition
+        static for (const auto i : 4)
+        {
+            state[i] ^= round_keys[0][i];
+        }
+        
+        // Main rounds
+        static for (const auto round : ROUNDS - 1)
+        {
+            // SubBytes
+            static for (const auto i : 4)
+            {
+                state[i] = sub_word(state[i]);
+            }
+            
+            // ShiftRows (simplified - just rotate)
+            uint32 temp = state[1];
+            state[1] = rotate_word(state[1]);
+            state[2] = rotate_word(rotate_word(state[2]));
+            state[3] = rotate_word(rotate_word(rotate_word(state[3])));
+            
+            // MixColumns
+            static for (const auto i : 4)
+            {
+                state[i] = mix_columns(state[i]);
+            }
+            
+            // AddRoundKey
+            static for (const auto i : 4)
+            {
+                state[i] ^= round_keys[round + 1][i];
+            }
+        }
+        
+        // Final round (no MixColumns)
+        static for (const auto i : 4)
+        {
+            state[i] = sub_word(state[i]);
+        }
+        
+        static for (const auto i : 4)
+        {
+            state[i] ^= round_keys[ROUNDS][i];
+        }
+        
+        return state;
+    }
+}
+
+export BlockCipher;
+```
+
+<Warning>
+  This is a simplified educational example. For production use, employ standard cryptographic libraries and implementations that have been thoroughly vetted.
+</Warning>
+
+## Hash Function Example
+
+Here's a simple hash function implementation:
+
+```kanagawa hash_accelerator.k
+import base
+
+// Simple hash function accelerator
+template <auto HASH_SIZE = 256>
+class HashAccelerator
+{
+private:
+    const auto BLOCK_SIZE = 64;  // Process 64 bytes at a time
+    
+    uint32[8] _state = {
+        0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a,
+        0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19
+    };
+
+public:
+    // Update hash with new data block
+    void update(uint8[BLOCK_SIZE] block)
+    {
+        uint32[16] words;
+        
+        // Convert bytes to 32-bit words
+        static for (const auto i : 16)
+        {
+            words[i] = concat(
+                block[i * 4 + 3],
+                block[i * 4 + 2],
+                block[i * 4 + 1],
+                block[i * 4]
+            );
+        }
+        
+        // Extend to 64 words
+        uint32[64] w;
+        static for (const auto i : 16)
+        {
+            w[i] = words[i];
+        }
+        
+        static for (const auto i : 48)
+        {
+            uint32 s0 = rotate_right(w[i + 1], 7) ^
+                       rotate_right(w[i + 1], 18) ^
+                       (w[i + 1] >> 3);
+            
+            uint32 s1 = rotate_right(w[i + 14], 17) ^
+                       rotate_right(w[i + 14], 19) ^
+                       (w[i + 14] >> 10);
+            
+            w[i + 16] = w[i] + s0 + w[i + 9] + s1;
+        }
+        
+        // Compression function
+        uint32[8] temp_state = _state;
+        
+        static for (const auto i : 64)
+        {
+            uint32 s1 = rotate_right(temp_state[4], 6) ^
+                       rotate_right(temp_state[4], 11) ^
+                       rotate_right(temp_state[4], 25);
+            
+            uint32 ch = (temp_state[4] & temp_state[5]) ^
+                       (~temp_state[4] & temp_state[6]);
+            
+            uint32 temp1 = temp_state[7] + s1 + ch + k(i) + w[i];
+            
+            uint32 s0 = rotate_right(temp_state[0], 2) ^
+                       rotate_right(temp_state[0], 13) ^
+                       rotate_right(temp_state[0], 22);
+            
+            uint32 maj = (temp_state[0] & temp_state[1]) ^
+                        (temp_state[0] & temp_state[2]) ^
+                        (temp_state[1] & temp_state[2]);
+            
+            uint32 temp2 = s0 + maj;
+            
+            // Shift state
+            temp_state[7] = temp_state[6];
+            temp_state[6] = temp_state[5];
+            temp_state[5] = temp_state[4];
+            temp_state[4] = temp_state[3] + temp1;
+            temp_state[3] = temp_state[2];
+            temp_state[2] = temp_state[1];
+            temp_state[1] = temp_state[0];
+            temp_state[0] = temp1 + temp2;
+        }
+        
+        // Update state
+        static for (const auto i : 8)
+        {
+            _state[i] += temp_state[i];
+        }
+    }
+    
+    // Get final hash value
+    uint32[8] finalize()
+    {
+        return _state;
+    }
+
+private:
+    inline uint32 rotate_right(uint32 x, count_t<32> n)
+    {
+        return (x >> n) | (x << (32 - n));
+    }
+    
+    inline uint32 k(count_t<64> i)
+    {
+        const uint32[64] k_constants = {
+            0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5,
+            0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5,
+            // ... (full 64 constants)
+            0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2
+        };
+        return k_constants[i];
+    }
+}
+
+export HashAccelerator<256>;
+```
+
+## Performance Optimization
+
+<AccordionGroup>
+  <Accordion title="Pipeline Encryption Rounds">
+    Process multiple blocks simultaneously through the pipeline:
+    
+    ```kanagawa
+    void encrypt_stream(uint32[4][N_BLOCKS] blocks)
+    {
+        for (const auto i : N_BLOCKS)
+        {
+            blocks[i] = encrypt(blocks[i], _key);
+        }
+    }
+    ```
+    
+    The `for` loop creates a pipeline that processes one block per cycle after initial latency.
+  </Accordion>
+
+  <Accordion title="Parallel S-Box Lookups">
+    Use `static for` to parallelize independent lookups:
+    
+    ```kanagawa
+    uint8[16] state;
+    static for (const auto i : 16)
+    {
+        state[i] = sbox(state[i]);  // All lookups in parallel
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="Galois Field Operations">
+    Use lookup tables for complex GF operations:
+    
+    ```kanagawa
+    const uint8[256] gf_mul2_table = generate_gf_mul2_lut();
+    const uint8[256] gf_mul3_table = generate_gf_mul3_lut();
+    
+    inline uint8 galois_mul2(uint8 x)
+    {
+        return gf_mul2_table[x];
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="Key Schedule Precomputation">
+    For fixed keys, precompute round keys:
+    
+    ```kanagawa
+    const uint32[ROUNDS + 1][4] _precomputed_keys = 
+        expand_key({0x2b7e1516, 0x28aed2a6, 0xabf71588, 0x09cf4f3c});
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Testing Crypto Accelerators
+
+```kanagawa crypto_test.k
+import base
+import test.unit as unit
+import test.runner
+
+inline void CRC32Test(unit::tag_t tag)
+{
+    crc_calculator<32, 0xEDB88320, 0xFFFFFFFF, 0xFFFFFFFF, 
+                   true, true, 9, 1> crc;
+    
+    // Test string: "123456789"
+    uint8[64] data = {};
+    data[0] = '1'; data[1] = '2'; data[2] = '3';
+    data[3] = '4'; data[4] = '5'; data[5] = '6';
+    data[6] = '7'; data[7] = '8'; data[8] = '9';
+    
+    uint32 result = crc.compute(0, data, 9, true);
+    
+    // Expected CRC-32 of "123456789" is 0xCBF43926
+    unit::assert_equal(tag, 0xCBF43926, result);
+}
+
+inline void test_main()
+{
+    unit::test<1>(CRC32Test);
+}
+```
+
+## Hardware Resources
+
+<CardGroup cols={2}>
+  <Card title="CRC Calculator" icon="calculator">
+    - ~500 LUTs per 32-bit CRC
+    - Processes 64 bytes/cycle
+    - Scales linearly with thread count
+  </Card>
+  
+  <Card title="AES Block" icon="lock">
+    - ~2K-5K LUTs per round
+    - 10 rounds for AES-128
+    - Can pipeline for 1 block/cycle
+  </Card>
+</CardGroup>
+
+## Next Steps
+
+<Card title="Custom Instructions" icon="code" href="/examples/custom-instructions">
+  Learn how to extend the RISC-V processor with custom crypto instructions
+</Card>

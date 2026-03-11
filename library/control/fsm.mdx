@@ -1,0 +1,39 @@
+---
+title: Finite State Machines
+description: FSM helpers for high-frequency state machines
+---
+
+The `control.fsm` module provides helpers for implementing efficient finite state machines.
+
+## Functions
+
+### `speculate_updates<StateCount>(fn, override)`
+
+Speculatively compute next state for all possible current states.
+
+```kanagawa
+auto updates = speculate_updates<8>(
+    [input](index_t<8> state) {
+        return compute_next_state(state, input);
+    },
+    {}
+);
+```
+
+### `apply_update(aggregate, apply, updates)`
+
+Apply aggregated state update.
+
+```kanagawa
+auto update_fn = apply_update(
+    [](updates_t[8] u, state_t s) { return u[s]; },
+    [](update_t u, state_t s) { return apply(u, s); },
+    updates
+);
+
+auto new_state = atomically(update_fn);
+```
+
+## See Also
+
+- [Loops](/library/control/loops) - Iteration constructs

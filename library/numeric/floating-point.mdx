@@ -1,0 +1,75 @@
+---
+title: Floating-Point
+description: IEEE 754 single and double precision floating-point
+---
+
+The `numeric.float32` and `numeric.float64` modules provide IEEE 754 floating-point arithmetic.
+
+## Overview
+
+```kanagawa
+import numeric.float32
+
+auto a = reinterpret_cast<float32>(0x3F800000);  // 1.0
+auto b = reinterpret_cast<float32>(0x40000000);  // 2.0
+
+auto sum = add(a, b);      // 3.0
+auto prod = mul(a, b);     // 2.0
+auto sq = sqrt(a);         // 1.0
+```
+
+## Arithmetic Operations
+
+```kanagawa
+auto sum = add(a, b);      // Addition
+auto diff = sub(a, b);     // Subtraction
+auto prod = mul(a, b);     // Multiplication
+auto recip = rcp(a);       // Reciprocal (1/a)
+```
+
+## Comparisons
+
+```kanagawa
+auto equal = eq(a, b);     // Equality
+auto less = lt(a, b);      // Less than
+auto greater = gt(a, b);   // Greater than
+```
+
+## Classification
+
+```kanagawa
+auto is_nan = isnan(x);       // Check if NaN
+auto is_inf = isinf(x);       // Check if infinity
+auto is_finite = isfinite(x); // Check if finite
+auto is_normal = isnormal(x); // Check if normalized
+```
+
+## Transcendental Functions
+
+```kanagawa
+auto sq = sqrt(x);         // Square root
+auto s = sin(x);           // Sine
+auto c = cos(x);           // Cosine
+auto t = atan(x);          // Arctangent
+
+auto l2 = log2(x);         // Log base 2
+auto l10 = log10(x);       // Log base 10
+auto ln = log(x);          // Natural log
+
+auto e2 = exp2(x);         // 2^x
+auto e = exp(x);           // e^x
+auto p = pow(x, y);        // x^y
+```
+
+## Conversions
+
+```kanagawa
+auto f = from_int(42);          // int32 -> float32
+auto i = to_int(f);             // float32 -> int32
+auto u = to_uint(f);            // float32 -> uint32
+```
+
+## See Also
+
+- [Fixed-Point](/library/numeric/fixed-point) - Fixed-point arithmetic
+- [Complex](/library/numeric/complex) - Complex numbers

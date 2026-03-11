@@ -1,0 +1,458 @@
+---
+title: 'Concurrency'
+description: 'Parallel execution patterns in Kanagawa'
+---
+
+## Concurrent Execution
+
+Kanagawa provides powerful abstractions for expressing concurrent execution. Unlike traditional HDLs where parallelism is implicit, Kanagawa makes concurrency explicit through language constructs that map cleanly to hardware pipelines.
+
+## Pipelined Loops
+
+### pipelined_for
+
+Creates multiple concurrent threads that execute in parallel:
+
+```kanagawa
+import control.loop
+
+inline void ProcessData(uint32[16] input)
+{
+    // Spawn 16 concurrent threads
+    pipelined_for(16, [input](uint32 tid)
+    {
+        uint32 value = input[tid];
+        uint32 result = value * 2 + 1;
+        println("{tid}: {result}");
+    });
+}
+```
+
+**Hardware:** Creates a state machine that dispatches threads and collects results.
+
+### pipelined_map
+
+Concurrently processes data and collects results into an array:
+
+```kanagawa
+inline uint32[8] SquareElements(uint32[8] input)
+{
+    return pipelined_map<8>(8, [input](uint32 tid) -> uint32
+    {
+        return input[tid] * input[tid];
+    });
+}
+```
+
+### pipelined_last
+
+Runs concurrent threads but only returns the last result:
+
+```kanagawa
+inline uint32 FindLast(uint32 count)
+{
+    return pipelined_last(count, [](uint32 tid) -> uint32
+    {
+        return tid * tid;
+    });
+}
+```
+
+## Async Execution
+
+### async_exec
+
+Spawn independent concurrent threads:
+
+```kanagawa
+import control.async
+
+inline void ParallelOperations(uint32 x)
+{
+    uint32 y = x + 1;
+    
+    // Spawn async thread
+    async_exec([y]()
+    {
+        uint32 result = expensive_operation(y);
+        process_result(result);
+    });
+    
+    // Main thread continues immediately
+    quick_operation(x);
+}
+```
+
+### async_then
+
+Chain asynchronous operations:
+
+```kanagawa
+inline void ChainedAsync(uint32 input)
+{
+    async_then(
+        [input]() -> uint32
+        {
+            return long_computation(input);
+        },
+        [](uint32 result)
+        {
+            handle_result(result);
+        }
+    );
+}
+```
+
+### fork_join
+
+Fork multiple operations and wait for all to complete:
+
+```kanagawa
+inline void ParallelWork(uint32 a, uint32 b)
+{
+    fork_join(
+        [a]() { process_a(a); },
+        [b]() { process_b(b); }
+    );
+    
+    // Both complete before continuing
+}
+```
+
+## Static Parallelism
+
+### static for
+
+Unrolls loops at compile time for maximum parallelism:
+
+```kanagawa
+uint32[8] input;
+uint32[8] output;
+
+// Fully unrolled - all operations in parallel
+static for (const auto i : 8)
+{
+    output[i] = input[i] * 2 + 1;
+}
+```
+
+**Trade-offs:**
+- ✅ Maximum parallelism
+- ✅ No control overhead
+- ❌ Increases area (logic replication)
+
+### Loop-Carried Dependencies
+
+Dependencies between iterations create pipeline depth:
+
+```kanagawa
+uint32[4] data;
+uint32 sum = 0;
+
+// Sequential dependency through 'sum'
+static for (const auto i : 4)
+{
+    sum += data[i];  // Each iteration depends on previous
+}
+```
+
+Use library functions for optimized reductions:
+
+```kanagawa
+import data.array
+
+// Optimized tree reduction
+uint32 sum = reduce([](uint32 a, uint32 b) { return a + b; }, data, 0);
+```
+
+## Synchronization Patterns
+
+### Producer-Consumer
+
+```kanagawa
+import data.fifo
+
+class ProducerConsumer
+{
+private:
+    fifo<uint32, 16> _queue;
+
+public:
+    void Produce(uint32 data)
+    {
+        _queue.enqueue(data);
+    }
+    
+    uint32 Consume()
+    {
+        return _queue.dequeue();
+    }
+}
+```
+
+### Barrier Synchronization
+
+```kanagawa
+import sync.barrier
+
+class WorkerPool
+{
+private:
+    barrier<4> _sync_point;
+
+public:
+    void Worker(uint32 tid)
+    {
+        // Phase 1
+        do_work_phase1(tid);
+        
+        // Wait for all workers
+        _sync_point.wait();
+        
+        // Phase 2
+        do_work_phase2(tid);
+    }
+}
+```
+
+### Semaphore
+
+```kanagawa
+import sync.semaphore
+
+class ResourcePool
+{
+private:
+    semaphore<8> _available;
+
+public:
+    void AcquireResource()
+    {
+        _available.acquire();
+        // Use resource
+        _available.release();
+    }
+}
+```
+
+## Thread Ordering
+
+### Ordered Execution (Default)
+
+Threads complete in order:
+
+```kanagawa
+class OrderedPipeline
+{
+    uint32 Process(uint32 x)
+    {
+        // Variable latency, but ordered results
+        uint32 result = 0;
+        for (uint32 i = 0; i < x; i++)
+        {
+            result += i;
+        }
+        return result;
+    }
+}
+```
+
+### Unordered Execution
+
+Threads can complete out of order for higher throughput:
+
+```kanagawa
+class UnorderedPipeline
+{
+    [[unordered]] uint32 Process(uint32 x)
+    {
+        uint32 result = 0;
+        [[unordered]] for (uint32 i = 0; i < x; i++)
+        {
+            result += i;
+        }
+        return result;
+    }
+}
+```
+
+### Reorder Blocks
+
+Restore ordering after unordered operations:
+
+```kanagawa
+class ReorderedResults
+{
+    [[pipelined]] uint32 Process(uint32 x)
+    {
+        uint32 result;
+        
+        reorder
+        {
+            result = unordered_operation(x);
+        }
+        
+        return result;  // Results back in order
+    }
+}
+```
+
+## Performance Patterns
+
+### Speculative Execution
+
+Compute all possibilities, select result:
+
+```kanagawa
+import control.fsm
+
+inline uint32 Speculative(uint32 x, uint32 selector)
+{
+    // Compute all branches
+    auto results = speculate_updates(
+        [x](index_t<4> i) -> uint32
+        {
+            switch (i)
+            {
+            case 0: return x + 1;
+            case 1: return x * 2;
+            case 2: return x - 3;
+            case 3: return x / 4;
+            }
+        },
+        {}
+    );
+    
+    // Select based on runtime value
+    return results[selector];
+}
+```
+
+### Pipeline Parallelism
+
+Overlap different stages of computation:
+
+```kanagawa
+class Pipeline
+{
+    void Process(uint32 data)
+    {
+        // Stage 1: Decode
+        auto decoded = decode(data);
+        
+        // Stage 2: Execute (overlaps with next decode)
+        async_exec([decoded]()
+        {
+            auto result = execute(decoded);
+            
+            // Stage 3: Writeback
+            writeback(result);
+        });
+    }
+}
+```
+
+### Data Parallelism
+
+Process multiple data items simultaneously:
+
+```kanagawa
+inline void SIMD_Add(uint32[8] a, uint32[8] b, uint32[8]& result)
+{
+    // All 8 additions happen in parallel
+    static for (const auto i : 8)
+    {
+        result[i] = a[i] + b[i];
+    }
+}
+```
+
+## Concurrency Attributes
+
+### [[async]]
+
+Mark methods as asynchronous:
+
+```kanagawa
+class AsyncWorker
+{
+public:
+    [[async]] void DoWork(uint32 data)
+    {
+        process(data);
+    }
+}
+```
+
+### [[pipelined]]
+
+Explicitly mark pipelined functions:
+
+```kanagawa
+[[pipelined]] uint32 PipelinedOp(uint32 x)
+{
+    return x * x + 2 * x + 1;
+}
+```
+
+### [[unordered]]
+
+Allow out-of-order completion:
+
+```kanagawa
+[[unordered]] 
+for (uint32 i : count)
+{
+    // Iterations may complete out of order
+}
+```
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="Choose the Right Abstraction">
+    - Use `static for` for fixed-size parallel operations
+    - Use `pipelined_for` for dynamic parallelism
+    - Use `async_exec` for fire-and-forget operations
+    - Use `fork_join` for structured parallelism
+  </Accordion>
+  
+  <Accordion title="Minimize Synchronization">
+    ```kanagawa
+    // Good: Independent threads
+    pipelined_for(8, [data](uint32 tid)
+    {
+        uint32 local = data[tid] * 2;
+    });
+    
+    // Bad: Shared state requires sync
+    pipelined_for(8, [](uint32 tid)
+    {
+        atomic { shared_counter++; }
+    });
+    ```
+  </Accordion>
+  
+  <Accordion title="Consider Area vs Throughput">
+    - `static for`: High area, maximum throughput
+    - `pipelined_for`: Balanced area and throughput  
+    - Sequential loops: Minimum area, lower throughput
+  </Accordion>
+</AccordionGroup>
+
+## Related Topics
+
+<CardGroup cols={2}>
+  <Card title="Wavefront Threading" icon="wave-pulse" href="/concepts/wavefront-threading">
+    Core threading model
+  </Card>
+  <Card title="Memory Model" icon="memory" href="/concepts/memory-model">
+    Synchronization and shared state
+  </Card>
+  <Card title="Control Flow" icon="code-branch" href="/language/control-flow">
+    Language control structures
+  </Card>
+  <Card title="Optimization" icon="gauge-high" href="/best-practices/optimization">
+    Performance optimization techniques
+  </Card>
+</CardGroup>

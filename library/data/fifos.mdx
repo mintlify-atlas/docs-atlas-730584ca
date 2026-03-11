@@ -1,0 +1,441 @@
+---
+title: FIFOs
+description: First-in-first-out queue implementations for dataflow
+---
+
+The `data.fifo` module provides FIFO (First-In-First-Out) queue implementations optimized for hardware dataflow patterns. FIFOs are essential for producer-consumer communication and managing data streams.
+
+## Overview
+
+Kanagawa provides three FIFO variants for different use cases:
+
+1. **`FIFO`** - Standard blocking/non-blocking FIFO
+2. **`FIFO_store_and_forward`** - Deferred dequeue until full packet received
+3. **`fifo_nb`** - Non-blocking FIFO with polling interface
+
+```kanagawa
+import data.fifo
+
+// Create blocking FIFO with capacity 16
+FIFO<uint32, 16> queue;
+
+queue.enqueue(42);
+auto value = queue.dequeue(); // Blocks if empty
+```
+
+## FIFO (Standard)
+
+Basic FIFO with configurable blocking behavior.
+
+### Type Definition
+
+```kanagawa
+template<
+    typename T,                  // Element type
+    auto Size,                   // Capacity (must be power of 2)
+    bool EnqueueBlocking = true, // Block on enqueue when full
+    bool DequeueBlocking = true  // Block on dequeue when empty
+>
+class FIFO
+```
+
+<ParamField path="T" type="typename">
+  Type of each FIFO entry
+</ParamField>
+
+<ParamField path="Size" type="auto">
+  Maximum number of entries. **Must be a power of 2.**
+</ParamField>
+
+<ParamField path="EnqueueBlocking" type="bool" default="true">
+  When `true`, `enqueue()` blocks if FIFO is full. When `false`, caller must ensure FIFO is not full.
+</ParamField>
+
+<ParamField path="DequeueBlocking" type="bool" default="true">
+  When `true`, `dequeue()` blocks if FIFO is empty. When `false`, caller must ensure FIFO is not empty.
+</ParamField>
+
+### Methods
+
+<ResponseField name="count()" type="count_t<Size>">
+  Returns number of elements currently in FIFO.
+  
+  <Warning>
+  Value may be stale immediately after reading due to concurrent enqueue/dequeue operations.
+  </Warning>
+</ResponseField>
+
+<ResponseField name="enqueue(value)" type="void">
+  Write one entry to the FIFO.
+  
+  **Behavior:**
+  - If `EnqueueBlocking=true`: Blocks until space available
+  - If `EnqueueBlocking=false`: Caller must ensure FIFO not full (checked with assert)
+  
+  ```kanagawa
+  FIFO<uint32, 16> fifo;
+  fifo.enqueue(0x12345678);
+  ```
+</ResponseField>
+
+<ResponseField name="dequeue()" type="T">
+  Read one entry from the FIFO.
+  
+  **Behavior:**
+  - If `DequeueBlocking=true`: Blocks until data available
+  - If `DequeueBlocking=false`: Caller must ensure FIFO not empty (checked with assert)
+  
+  ```kanagawa
+  auto value = fifo.dequeue();
+  ```
+</ResponseField>
+
+### Usage Examples
+
+<Tabs>
+  <Tab title="Blocking FIFO">
+    ```kanagawa
+    // Standard blocking FIFO
+    FIFO<uint32, 64> queue;
+    
+    // Producer thread
+    async_exec([&queue]() {
+        for (uint32 i = 0; i < 100; i++) {
+            queue.enqueue(i);  // Blocks if full
+        }
+    });
+    
+    // Consumer thread
+    for (uint32 i = 0; i < 100; i++) {
+        auto data = queue.dequeue();  // Blocks if empty
+        process(data);
+    }
+    ```
+  </Tab>
+  
+  <Tab title="Non-Blocking">
+    ```kanagawa
+    // Non-blocking FIFO (caller ensures not empty/full)
+    FIFO<uint8, 32, false, false> fifo;
+    
+    bool can_write = (fifo.count() < 32);
+    if (can_write) {
+        fifo.enqueue(data);  // Never blocks
+    }
+    
+    bool has_data = (fifo.count() > 0);
+    if (has_data) {
+        auto value = fifo.dequeue();  // Never blocks
+    }
+    ```
+  </Tab>
+  
+  <Tab title="Producer-Consumer">
+    ```kanagawa
+    class DataProcessor {
+        FIFO<uint32, 128> input_fifo;
+        FIFO<uint32, 128> output_fifo;
+        
+        [[async]] void producer() {
+            while (true) {
+                auto data = generate_data();
+                input_fifo.enqueue(data);
+            }
+        }
+        
+        [[pipelined]] void processor() {
+            auto data = input_fifo.dequeue();
+            auto result = process(data);
+            output_fifo.enqueue(result);
+        }
+        
+        void consumer() {
+            while (true) {
+                auto result = output_fifo.dequeue();
+                output_result(result);
+            }
+        }
+    }
+    ```
+  </Tab>
+</Tabs>
+
+## FIFO Store-and-Forward
+
+FIFO variant that allows deferring dequeue operations until a complete "packet" is received.
+
+### Type Definition
+
+```kanagawa
+template<
+    typename T,
+    auto Size,
+    bool DequeueBlocking = true
+>
+class FIFO_store_and_forward
+```
+
+### Methods
+
+<ResponseField name="enqueue(value, releaseDeferredDequeues)" type="count_t<Size>">
+  Write entry and optionally release pending dequeues.
+  
+  **Parameters:**
+  - `value`: Data to enqueue
+  - `releaseDeferredDequeues`: If `true`, allow all pending dequeues to proceed
+  
+  **Returns:** Number of dequeue operations released
+  
+  ```kanagawa
+  FIFO_store_and_forward<uint32, 64> fifo;
+  
+  // Enqueue packet data
+  fifo.enqueue(header, false);    // Don't release yet
+  fifo.enqueue(payload1, false);  // Don't release yet
+  fifo.enqueue(payload2, false);  // Don't release yet
+  fifo.enqueue(trailer, true);    // Release all 4 dequeues
+  ```
+</ResponseField>
+
+<ResponseField name="dequeue()" type="T">
+  Read entry (blocks until released by enqueue with `releaseDeferredDequeues=true`).
+</ResponseField>
+
+### Use Case: Packet Processing
+
+```kanagawa
+class PacketHandler {
+    FIFO_store_and_forward<uint32, 256> packet_fifo;
+    
+    void send_packet() {
+        const auto packet_len = 10;
+        
+        // Send packet words
+        for (uint32 i = 0; i < packet_len - 1; i++) {
+            packet_fifo.enqueue(packet_data[i], false);
+        }
+        
+        // Last word releases all dequeues
+        auto released = packet_fifo.enqueue(
+            packet_data[packet_len - 1],
+            true
+        );
+        // released == packet_len
+    }
+    
+    void receive_packet() {
+        // These dequeues won't complete until
+        // entire packet is enqueued
+        for (uint32 i = 0; i < 10; i++) {
+            auto word = packet_fifo.dequeue();
+            process_word(word);
+        }
+    }
+}
+```
+
+## FIFO Non-Blocking (fifo_nb)
+
+FIFO with polling interface for explicit flow control.
+
+### Type Definition
+
+```kanagawa
+template<typename T, auto Size>
+class fifo_nb
+```
+
+### Producer Interface
+
+<ResponseField name="full()" type="bool">
+  Returns `true` if no more entries can be enqueued.
+  
+  ```kanagawa
+  if (!fifo.full()) {
+      fifo.reserve_enqueue();
+  }
+  ```
+</ResponseField>
+
+<ResponseField name="reserve_enqueue()" type="void">
+  Reserve one slot for future enqueue. Must be paired with `enqueue()`.
+  
+  <Warning>
+  Call `full()` before `reserve_enqueue()` to check availability.
+  </Warning>
+</ResponseField>
+
+<ResponseField name="enqueue(value)" type="void">
+  Write reserved slot. Must call `reserve_enqueue()` first.
+</ResponseField>
+
+<ResponseField name="check_and_reserve()" type="bool">
+  Helper that checks and reserves atomically. Returns `true` if slot reserved.
+  
+  ```kanagawa
+  atomic {
+      if (fifo.check_and_reserve()) {
+          // Slot reserved
+      }
+  }
+  fifo.enqueue(data);
+  ```
+</ResponseField>
+
+<ResponseField name="enqueue_blocking(value)" type="void">
+  Helper that blocks until space available, then enqueues.
+</ResponseField>
+
+### Consumer Interface
+
+<ResponseField name="empty()" type="bool">
+  Returns `true` if no data available.
+</ResponseField>
+
+<ResponseField name="front()" type="T">
+  Returns value at head of queue without removing it.
+</ResponseField>
+
+<ResponseField name="pop()" type="void">
+  Removes one item from queue.
+  
+  <Note>
+  Typically call `empty()`, `front()`, and `pop()` in same atomic block.
+  </Note>
+</ResponseField>
+
+### Usage Pattern
+
+```kanagawa
+fifo_nb<uint32, 64> fifo;
+
+// Producer with flow control
+atomic {
+    if (!fifo.full()) {
+        fifo.reserve_enqueue();
+    } else {
+        // Handle backpressure
+    }
+}
+if (slot_reserved) {
+    fifo.enqueue(data);
+}
+
+// Consumer with conditional read
+atomic {
+    if (!fifo.empty()) {
+        auto value = fifo.front();
+        if (should_accept(value)) {
+            fifo.pop();
+            process(value);
+        }
+    }
+}
+```
+
+## Hardware Implementation
+
+<Note>
+**FIFO Structure**
+
+- **Memory**: Circular buffer using block RAM or registers
+- **Pointers**: Read and write pointers wrap at Size
+- **Size Constraint**: Must be power of 2 for efficient address arithmetic
+- **Semaphores**: Control blocking behavior
+  - Read semaphore (initial=0): Blocks dequeue when empty
+  - Write semaphore (initial=Size): Blocks enqueue when full
+</Note>
+
+### Area vs. Performance Tradeoffs
+
+<CodeGroup>
+```kanagawa Small/Fast
+// Small, fast FIFO using registers
+FIFO<uint32, 4> small_fifo;
+```
+
+```kanagawa Large/Block RAM
+// Large FIFO using block RAM
+FIFO<packet_t, 1024> large_fifo;
+```
+
+```kanagawa High Throughput
+// Multiple FIFOs for parallel processing
+FIFO<uint32, 64>[4] parallel_fifos;
+```
+</CodeGroup>
+
+## Common Patterns
+
+### Rate Matching
+
+```kanagawa
+// Slow producer, fast consumer
+class RateMatcher {
+    FIFO<uint32, 256> buffer;
+    
+    [[async]] void slow_producer() {
+        while (true) {
+            wait(10);  // Slow data generation
+            buffer.enqueue(generate());
+        }
+    }
+    
+    [[pipelined]] void fast_consumer() {
+        // Processes every cycle when data available
+        auto data = buffer.dequeue();
+        process(data);
+    }
+}
+```
+
+### Clock Domain Crossing
+
+```kanagawa
+class ClockDomainCrossing {
+    // FIFO with sufficient depth for metastability
+    FIFO<uint32, 8> cdc_fifo;
+    
+    [[clock("clk_a")]] void source() {
+        cdc_fifo.enqueue(data_a);
+    }
+    
+    [[clock("clk_b")]] void sink() {
+        auto data_b = cdc_fifo.dequeue();
+    }
+}
+```
+
+### Pipeline Stage
+
+```kanagawa
+class PipelineStage {
+    FIFO<stage_data_t, 2> input_buffer;
+    FIFO<result_t, 2> output_buffer;
+    
+    [[pipelined(5)]]  // 5-cycle latency
+    void stage() {
+        auto input = input_buffer.dequeue();
+        auto output = complex_operation(input);
+        output_buffer.enqueue(output);
+    }
+}
+```
+
+## Sizing Guidelines
+
+<Warning>
+**Choose FIFO Size Carefully**
+
+- **Too Small**: Causes stalls and reduces throughput
+- **Too Large**: Wastes resources and increases latency
+- **Rule of Thumb**: Size ≥ max(producer_burst, consumer_latency)
+- **Minimum**: Power of 2, at least 2
+- **Consider**: Burst behavior, latency variation, area budget
+</Warning>
+
+## See Also
+
+- [Buffers](/library/data/buffers) - Shift registers
+- [Async](/library/control/async) - Asynchronous execution
+- [Loops](/library/control/loops) - Pipelined iteration

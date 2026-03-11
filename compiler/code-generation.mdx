@@ -1,0 +1,59 @@
+---
+title:'Code Generation'
+description:'Understanding generated RTL'
+---
+
+## Generated Verilog
+
+Kanagawa generates synthesizable Verilog:
+
+```kanagawa
+class Counter
+{
+public:
+    uint32 Increment(uint32 value)
+    {
+        return value + 1;
+    }
+}
+
+export Counter;
+```
+
+Generates:
+
+```verilog
+module Counter
+(
+    input wire clk,
+    input wire reset,
+    input wire Increment_valid_in,
+    input wire [31:0] Increment_value_in,
+    output logic Increment_rdy_out,
+    output logic [31:0] Increment_result_out
+);
+    // Generated logic
+endmodule
+```
+
+## Interface Signals
+
+- `_valid_in` - Input data valid
+- `_rdy_out` - Ready to accept input
+- `_result_out` - Output data
+- `_empty_out` - Output available
+
+## Reports
+
+Compiler generates:
+- Area report (LUTs, FFs, RAMs, DSPs)
+- Timing analysis
+- Resource utilization
+- Pipeline structure
+
+## Related Topics
+
+<CardGroup cols={2}>
+<Card title="Mapping" href="/concepts/mapping-to-hardware">How code becomes hardware</Card>
+<Card title="Debugging" href="/compiler/debugging">Debug generated code</Card>
+</CardGroup>

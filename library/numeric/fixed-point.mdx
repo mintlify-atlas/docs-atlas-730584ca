@@ -1,0 +1,117 @@
+---
+title: Fixed-Point
+description: Q-format fixed-point arithmetic with transcendental functions
+---
+
+The `numeric.fixed` module provides fixed-point arithmetic with support for transcendental functions, making it ideal for DSP and numerical applications.
+
+## Overview
+
+Fixed-point numbers use `fixed<I, F>` where I is integer bits and F is fractional bits.
+
+```kanagawa
+import numeric.fixed
+
+// Q16.16 format (16 integer, 16 fractional bits)
+fixed<16, 16> x;
+x.value = 0x00018000;  // Represents 1.5
+
+auto y = sqrt(x);  // Hardware square root
+```
+
+## Type Definition
+
+```kanagawa
+struct fixed<auto I, auto F> {
+    int<I + F> value;  // Underlying representation
+}
+```
+
+Total width is I + F bits.
+
+## Arithmetic Functions
+
+### Rounding
+
+```kanagawa
+auto r = round(x);   // Round half up
+auto c = ceil(x);    // Round up
+auto f = floor(x);   // Round down
+auto t = trunc(x);   // Round toward zero
+```
+
+### Basic Operations
+
+```kanagawa
+auto a = abs(x);               // Absolute value
+auto minimum = min(x, y);      // Minimum
+auto maximum = max(x, y);      // Maximum
+auto d = dim(x, y);            // Positive difference max(x-y, 0)
+```
+
+## Transcendental Functions
+
+### Roots and Reciprocals
+
+```kanagawa
+auto sq = sqrt(x);        // Square root
+auto r = reciprocal(x);   // 1/x
+auto isq = invsqrt(x);    // 1/sqrt(x)
+```
+
+### Exponentials and Logarithms
+
+```kanagawa
+auto l2 = log2(x);   // Base-2 logarithm
+auto l10 = log10(x); // Base-10 logarithm
+auto ln = log(x);    // Natural logarithm
+
+auto e2 = exp2(x);   // 2^x
+auto e = exp(x);     // e^x
+
+auto p = pow(base, exponent);  // base^exponent
+```
+
+### Trigonometric
+
+```kanagawa
+auto s = sin(x);  // Sine (input in radians)
+auto c = cos(x);  // Cosine (input in radians)
+```
+
+## Usage Examples
+
+### DSP Filter
+
+```kanagawa
+class FIRFilter {
+    const auto TAPS = 8;
+    fixed<16, 16>[TAPS] coefficients;
+    
+    fixed<16, 16> filter(fixed<16, 16> input) {
+        fixed<32, 32> accumulator = {0};
+        
+        static for (const auto i : TAPS) {
+            accumulator.value += 
+                cast<int64>(samples[i].value) * 
+                cast<int64>(coefficients[i].value);
+        }
+        
+        // Scale back to Q16.16
+        return {cast<int32>(accumulator.value >> 16)};
+    }
+}
+```
+
+## Hardware Considerations
+
+<Note>
+- Most operations return `optional<fixed<I, F>>` for overflow detection
+- Transcendental functions use table lookups and refinement
+- Operations are pipelined for high throughput
+</Note>
+
+## See Also
+
+- [Integers](/library/numeric/integers) - Integer types
+- [Floating-Point](/library/numeric/floating-point) - IEEE 754 support

@@ -1,0 +1,220 @@
+---
+title: Contributing
+description: Learn how to contribute to the Kanagawa project and become part of the community
+---
+
+Thank you for your interest in contributing to Kanagawa! This guide will help you get started with contributing to the project.
+
+## Getting Started
+
+Before you begin contributing, make sure you have:
+
+<Steps>
+  <Step title="Set up your development environment">
+    Follow the [Building Guide](/resources/building) to set up your local development environment and build Kanagawa from source.
+  </Step>
+
+  <Step title="Familiarize yourself with the project">
+    - Read the [documentation](/introduction)
+    - Explore the [language guide](/language/syntax)
+    - Review existing [issues](https://github.com/microsoft/kanagawa/issues) and [pull requests](https://github.com/microsoft/kanagawa/pulls)
+  </Step>
+
+  <Step title="Read the Code of Conduct">
+    Review our [Code of Conduct](/resources/code-of-conduct) to understand our community standards.
+  </Step>
+</Steps>
+
+## Ways to Contribute
+
+There are many ways to contribute to Kanagawa:
+
+<CardGroup cols={2}>
+  <Card title="Report Bugs" icon="bug">
+    Found a bug? [Open an issue](https://github.com/microsoft/kanagawa/issues/new) with a clear description and reproduction steps.
+  </Card>
+  <Card title="Suggest Features" icon="lightbulb">
+    Have an idea? [Create a feature request](https://github.com/microsoft/kanagawa/issues/new) to start a discussion.
+  </Card>
+  <Card title="Fix Issues" icon="wrench">
+    Browse [open issues](https://github.com/microsoft/kanagawa/issues) and submit pull requests to fix bugs.
+  </Card>
+  <Card title="Improve Docs" icon="book">
+    Help improve documentation by fixing typos, clarifying explanations, or adding examples.
+  </Card>
+</CardGroup>
+
+## Development Workflow
+
+<Steps>
+  <Step title="Fork and clone the repository">
+    ```bash
+    # Fork the repo on GitHub, then clone your fork
+    git clone https://github.com/YOUR_USERNAME/kanagawa.git
+    cd kanagawa
+    git submodule update --init --recursive
+    ```
+  </Step>
+
+  <Step title="Create a feature branch">
+    ```bash
+    git checkout -b feature/your-feature-name
+    ```
+
+    Use a descriptive branch name:
+    - `feature/add-new-operator` for new features
+    - `fix/parser-crash` for bug fixes
+    - `docs/update-tutorial` for documentation
+  </Step>
+
+  <Step title="Make your changes">
+    - Write clean, readable code
+    - Follow existing code style and conventions
+    - Add tests for new functionality
+    - Update documentation as needed
+  </Step>
+
+  <Step title="Test your changes">
+    Run the test suite to ensure your changes don't break existing functionality:
+
+    ```bash
+    # Build your changes
+    ninja -j $(nproc) kanagawa_runtime
+
+    # Run relevant tests
+    ninja -j 2 run_syntax_tests
+    ninja -j 2 run_compiler_tests
+    ```
+
+    See the [Testing Guide](/resources/testing) for more details.
+  </Step>
+
+  <Step title="Commit your changes">
+    Write clear, descriptive commit messages:
+
+    ```bash
+    git add .
+    git commit -m "Add support for new array operator
+    
+    - Implement array slicing syntax
+    - Add parser tests for new syntax
+    - Update language reference documentation"
+    ```
+  </Step>
+
+  <Step title="Push and create a pull request">
+    ```bash
+    git push origin feature/your-feature-name
+    ```
+
+    Then open a pull request on GitHub with:
+    - Clear title describing the change
+    - Description of what changed and why
+    - Reference to any related issues
+    - Screenshots/examples if applicable
+  </Step>
+</Steps>
+
+## Pull Request Guidelines
+
+<AccordionGroup>
+  <Accordion title="Code Quality">
+    - Follow the existing code style and conventions
+    - Write clear, self-documenting code with comments where needed
+    - Keep changes focused and atomic
+    - Avoid unnecessary refactoring in feature PRs
+  </Accordion>
+
+  <Accordion title="Testing">
+    - Add tests for new functionality
+    - Ensure all existing tests pass
+    - Include both positive and negative test cases
+    - Test edge cases and error conditions
+  </Accordion>
+
+  <Accordion title="Documentation">
+    - Update relevant documentation
+    - Add code examples for new features
+    - Update the changelog if appropriate
+    - Include inline code comments for complex logic
+  </Accordion>
+
+  <Accordion title="Commit Messages">
+    - Write clear, descriptive commit messages
+    - Use present tense ("Add feature" not "Added feature")
+    - Reference issue numbers when applicable
+    - Explain the "why" not just the "what"
+  </Accordion>
+</AccordionGroup>
+
+## Code Review Process
+
+After submitting a pull request:
+
+1. **Automated checks** - CI will run tests and checks automatically
+2. **Code review** - Maintainers will review your code and provide feedback
+3. **Address feedback** - Make requested changes and push updates
+4. **Approval** - Once approved, a maintainer will merge your PR
+
+<Note>
+  Be patient during the review process. Maintainers are volunteers and may take time to respond.
+</Note>
+
+## Reporting Issues
+
+When reporting issues, please include:
+
+<Checklist>
+  - [ ] Clear, descriptive title
+  - [ ] Detailed description of the problem
+  - [ ] Steps to reproduce the issue
+  - [ ] Expected vs actual behavior
+  - [ ] Kanagawa version and platform
+  - [ ] Minimal code example (if applicable)
+  - [ ] Error messages or stack traces
+</Checklist>
+
+## Feature Requests
+
+When suggesting new features:
+
+- Explain the use case and motivation
+- Provide examples of how it would be used
+- Consider backward compatibility
+- Discuss alternative solutions
+- Be open to feedback and discussion
+
+## Getting Help
+
+If you need help with contributing:
+
+<CardGroup cols={2}>
+  <Card title="GitHub Issues" icon="github" href="https://github.com/microsoft/kanagawa/issues">
+    Search existing issues or create a new one
+  </Card>
+  <Card title="GitHub Discussions" icon="comments" href="https://github.com/microsoft/kanagawa/discussions">
+    Ask questions and discuss ideas with the community
+  </Card>
+</CardGroup>
+
+## Community
+
+Join the Kanagawa community:
+
+- **GitHub Discussions** - Ask questions and share ideas
+- **Issues** - Report bugs and request features
+- **Pull Requests** - Contribute code improvements
+
+## License
+
+By contributing to Kanagawa, you agree that your contributions will be licensed under the same license as the project. See the [LICENSE](https://github.com/microsoft/kanagawa/blob/main/LICENSE) file for details.
+
+## Recognition
+
+We value all contributions! Contributors will be:
+
+- Listed in the project's contributor list
+- Mentioned in release notes for significant contributions
+- Credited in relevant documentation
+
+Thank you for helping make Kanagawa better!

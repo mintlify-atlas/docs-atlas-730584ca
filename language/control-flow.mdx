@@ -1,0 +1,55 @@
+---
+title:'Control Flow'
+description:'Conditionals, loops, and control structures'
+---
+
+## Conditionals
+
+```kanagawa
+if (condition)
+{
+    handle_true();
+}
+else
+{
+    handle_false();
+}
+```
+
+## Switch Statements
+
+```kanagawa
+switch (value)
+{
+case 0: action_zero(); break;
+case 1: action_one(); break;
+default: action_default();
+}
+```
+
+## Loops
+
+### static for
+
+```kanagawa
+static for (const auto i : 8)
+{
+    output[i] = input[i] * 2;
+}
+```
+
+### Sequential Loops
+
+```kanagawa
+for (uint32 i = 0; i < count; i++)
+{
+    process(i);
+}
+```
+
+## Related Topics
+
+<CardGroup cols={2}>
+<Card title="Threads" href="/language/threads">Thread control</Card>
+<Card title="Syntax" href="/language/syntax">Language basics</Card>
+</CardGroup>

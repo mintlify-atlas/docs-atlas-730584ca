@@ -1,0 +1,65 @@
+---
+title:'Compiler Options'
+description:'Kanagawa compiler flags and settings'
+---
+
+## Optimization Flags
+
+### Basic Options
+
+| Flag | Description | Values |
+|------|-------------|--------|
+| `--optimize` | Optimization level | 0-2 |
+| `--register-ratio` | Logic depth | 0.5-2.0 |
+| `--work-list-size` | Optimization limit | 16-20 |
+
+### Area vs Frequency
+
+```bash
+# Favor area
+kanagawa --register-ratio=1.0 --mem-to-reg=1000
+
+# Favor frequency
+kanagawa --register-ratio=2.0 --carry-chain-width=16
+```
+
+## Device Options
+
+```bash
+# Target specific FPGA
+kanagawa --device=stratix10
+kanagawa --device=arria10
+
+# ASIC target
+kanagawa --device=asic
+```
+
+## Debug Options
+
+```bash
+# Enable warnings
+kanagawa --Wall --Wconversion
+
+# Generate reports
+kanagawa --report=area,timing
+
+# Verbose output
+kanagawa --verbose
+```
+
+## Memory Configuration
+
+```bash
+# Block RAM limits
+kanagawa --max-block-ram=1000
+
+# Utilization thresholds  
+kanagawa --block-ram-util-threshold=30
+```
+
+## Related Topics
+
+<CardGroup cols={2}>
+<Card title="Usage" href="/compiler/usage">Basic compilation</Card>
+<Card title="Optimization" href="/best-practices/optimization">Performance tuning</Card>
+</CardGroup>

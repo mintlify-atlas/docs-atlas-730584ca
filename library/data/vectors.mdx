@@ -1,0 +1,391 @@
+---
+title: Vectors
+description: Variable-length array operations with dynamic sizing
+---
+
+The `data.vector` module provides operations on variable-length arrays that can change size at runtime while maintaining a fixed maximum capacity. Import this module qualified to avoid conflicts with `data.array`.
+
+## Overview
+
+Vectors are variable-length arrays with a maximum capacity determined at compile time. Unlike fixed arrays, vectors track their current size and support dynamic insertion/deletion operations.
+
+```kanagawa
+import data.vector as V
+
+// Create vector with capacity 8, size 3
+vector<uint8, 8> v = {{1, 2, 3, 0, 0, 0, 0, 0}, 3};
+
+// Add element
+v = V::push_back(4, v); // size becomes 4
+
+// Map over valid elements only
+auto doubled = V::map(increment, v);
+```
+
+## Type Definition
+
+<ParamField path="vector<T, N>" type="struct">
+  Variable-length array type.
+  
+  **Fields:**
+  - `T[N] data` - Underlying fixed-size storage array
+  - `count_t<N> size` - Number of valid elements (0 to N)
+</ParamField>
+
+## Construction
+
+### `make_vector(data, size)`
+
+Create vector with specified data and size.
+
+```kanagawa
+auto v = make_vector({1, 2, 3, 0}, 3); // size=3
+```
+
+### `from_array(arr)`
+
+Construct vector from array (size = array length).
+
+```kanagawa
+auto v = from_array<uint8>({1, 2, 3}); // {{1, 2, 3}, 3}
+```
+
+### `from_optional(opt)`
+
+Construct capacity-1 vector from optional value.
+
+```kanagawa
+auto v1 = from_optional({true, 0xFF});  // {{0xFF}, 1}
+auto v2 = from_optional({false, 0});     // {{0}, 0}
+```
+
+### `repeat<N>(value, length)`
+
+Construct vector by replicating value.
+
+```kanagawa
+auto v = repeat<4>(3, 2); // {{3, 3, 0, 0}, 2}
+```
+
+## Capacity
+
+### `size(v)` / `empty(v)` / `capacity(v)`
+
+```kanagawa
+vector<uint8, 5> v = {{1, 2, 3, 0, 0}, 3};
+
+auto len = size(v);      // 3
+auto is_empty = empty(v); // false
+auto cap = capacity(v);   // 5
+```
+
+### `reserve<M>(v)`
+
+Change vector capacity (must be >= current size).
+
+```kanagawa
+auto v = reserve<10>({{1, 2, 3}, 3}); // {{1, 2, 3, 0, ...}, 3}
+```
+
+### `resize(v, new_size)`
+
+Change vector size. New elements are undefined if growing.
+
+```kanagawa
+auto v = resize({{0, 1, 2, 3}, 4}, 2); // {{0, 1, 2, 3}, 2}
+```
+
+### `clear(v)`
+
+Set size to 0 (data unchanged).
+
+```kanagawa
+auto v = clear({{1, 2, 3, 4}, 4}); // {{1, 2, 3, 4}, 0}
+```
+
+## Element Access
+
+### `at(v, i)` / `front(v)` / `back(v)`
+
+```kanagawa
+vector<uint8, 4> v = {{10, 20, 30, 40}, 3};
+
+auto elem = at(v, 1);   // 20 (asserts if i >= v.size)
+auto first = front(v);  // 10
+auto last = back(v);    // 30 (element at size-1)
+```
+
+## Modifiers
+
+### `push_back(value, v)`
+
+Append element to end.
+
+```kanagawa
+auto v = push_back(0xFF, {{0, 1, 2}, 2});
+// {{0, 1, 0xFF}, 3}
+```
+
+### `pop_back(v)`
+
+Remove last element.
+
+```kanagawa
+auto v = pop_back({{0, 1, 2, 3}, 2});
+// {{0, 1, 2, 3}, 1}
+```
+
+### `insert(v, pos, value)`
+
+Insert value before position.
+
+```kanagawa
+auto v = insert({{0, 0, 0, 0}, 3}, 2, 0x20);
+// {{0, 0, 0x20, 0}, 4}
+```
+
+### `erase(v, pos)`
+
+Remove element at position.
+
+```kanagawa
+auto v = erase({{0, 1, 2}, 3}, 1);
+// {{0, 2, 2}, 2}
+```
+
+### `append(v1, v2)`
+
+Concatenate two vectors.
+
+```kanagawa
+auto v = append(
+    {{1, 2, 0, 0}, 2},
+    {{3, 4, 0, 0}, 2}
+); // {{1, 2, 3, 4}, 4}
+```
+
+## Transformations
+
+### `map(f, v)`
+
+Apply function to each valid element.
+
+```kanagawa
+auto result = map(increment, {{1, 2, 3, 4}, 3});
+// {{2, 3, 4, 0}, 3}
+```
+
+### `gather(valids, data)`
+
+Gather valid entries to front of vector.
+
+```kanagawa
+bool[8] valids = {false, true, false, true, true, false, false, true};
+uint8[8] data = {1, 2, 3, 4, 5, 6, 7, 8};
+auto result = gather(valids, data);
+// {{2, 4, 5, 8, X, X, X, X}, 4}  // X = undefined
+```
+
+### `scatter(valids, data)`
+
+Scatter vector entries to positions marked valid.
+
+```kanagawa
+bool[8] valids = {false, true, false, true, true, false, false, true};
+uint8[8] data = {2, 4, 5, 8, 0, 0, 0, 0};
+auto result = scatter(valids, data);
+// {{X, 2, X, 4, 5, X, X, 8}, 4}  // X = undefined
+```
+
+## Reductions
+
+Vector reductions work only on valid elements (indices < size).
+
+<CodeGroup>
+```kanagawa Arithmetic
+auto sum = reduce(add, {{9, 2, 5}, 3}); // 0x10
+auto min_val = minimum({{4, 64, 2}, 3}); // 2
+auto max_val = maximum({{5, -23, 182}, 3}); // 182
+auto total = sum<int16>({{3, -9, 7}, 3}); // 1
+```
+
+```kanagawa Logical
+auto all_true = and({{true, true, false}, 3});   // false
+auto any_true = or({{false, false, true}, 2});   // false
+
+auto has_even = any(even, {{1, 3, 6}, 3});      // true
+auto all_odd = all(odd, {{1, 3, 6}, 2});        // true
+```
+
+```kanagawa Optionals
+vector<optional<uint8>, 3> v = {
+    {{true, 1}, {false, 2}, {true, 3}},
+    3
+};
+auto first = first_valid(v); // {true, 1}
+auto last = last_valid(v);   // {true, 3}
+```
+</CodeGroup>
+
+### `map_reduce(map_fn, reduce_fn, v)`
+
+Map then reduce in single operation.
+
+```kanagawa
+auto all_even = map_reduce(
+    [](uint8 a){ return a % 2 == 0; },
+    [](bool x, bool y){ return x && y; },
+    {{2, 4, 7}, 2}
+); // true (only checks first 2 elements)
+```
+
+## Scans
+
+### `inclusive_scan(v, f)`
+
+Compute inclusive scan over valid elements.
+
+```kanagawa
+auto scan = inclusive_scan({{1, 2, 3}, 3}, add);
+// {{1, 3, 6}, 3}
+```
+
+### `prefix_sum(v)`
+
+Compute prefix sum.
+
+```kanagawa
+auto sums = prefix_sum({{0, 1, 2, 3}, 4});
+// {{0, 1, 3, 6}, 4}
+```
+
+## Zipping
+
+### `zip_with(f, v1, v2)`
+
+Combine elements using function. Result size is minimum of input sizes.
+
+```kanagawa
+auto sums = zip_with(
+    add,
+    {{1, 2, 3, 4}, 3},
+    {{1, 2, 3, 4, 5}, 4}
+); // {{2, 4, 6, 0}, 3}
+```
+
+### `zip(v1, v2)` / `unzip(v)`
+
+```kanagawa
+auto pairs = zip({{1, 2}, 2}, {{true, false}, 2});
+// {{{1, true}, {2, false}}, 2}
+
+auto arrays = unzip({{{0, 0}, {-1, 1}, {-2, 2}}, 2});
+// {{{0, -1, 0, 0}, 2}, {{0, 1, 0, 0}, 2}}
+```
+
+## Optionals
+
+### `map_optional(f, v)`
+
+Map function returning optionals, keeping only valid results.
+
+```kanagawa
+auto odds = map_optional(
+    [](uint8 x){ return make_optional(odd(x), x); },
+    {{1, 2, 3}, 3}
+); // {{1, 3, 0}, 2}
+```
+
+### `cat_optionals(v)`
+
+Extract valid elements from vector of optionals.
+
+```kanagawa
+vector<optional<bool>, 3> v = {
+    {{false, false}, {true, true}, {true, false}},
+    3
+};
+auto result = cat_optionals(v);
+// {{true, false, false}, 2}
+```
+
+## Deduplication
+
+### `unique_by(equality_fn, v)` / `unique(v)`
+
+Remove duplicate elements.
+
+```kanagawa
+auto result = unique({{1, 2, 3, 2}, 4});
+// {{{true, 1}, {true, 2}, {true, 3}, {false, 2}}, 4}
+```
+
+## Parallel Processing
+
+### `sharded_map<Shards, N>(f, get_shard_idx, v)`
+
+Process vector across multiple hardware instances.
+
+```kanagawa
+auto result = sharded_map<2, 8>(
+    [](index_t<2> shard, uint8 x){ return x * 2; },
+    [](uint8 x){ return x % 2; },  // route by LSB
+    {{1, 2, 3, 4}, 4}
+);
+```
+
+<ParamField path="Shards" type="auto">
+  Number of hardware replicas
+</ParamField>
+
+<ParamField path="N" type="auto">
+  Maximum vector capacity
+</ParamField>
+
+<ParamField path="f" type="(index_t<Shards>, T) -> R">
+  Function to apply (receives shard index)
+</ParamField>
+
+<ParamField path="get_shard_idx" type="(T) -> index_t<Shards>">
+  Function to determine which shard processes each element
+</ParamField>
+
+### `sharded_for_each<Shards, N>(f, get_shard_idx, v)`
+
+Execute function for each element across shards (no return value).
+
+## Comparison
+
+### `equal_by(equality_fn, v1, v2)` / `equal(v1, v2)`
+
+Compare vectors for equality. Returns false if sizes differ.
+
+```kanagawa
+auto eq = equal({{1, 2, 3}, 3}, {{1, 2, 3, 4}, 3}); // true
+```
+
+## Hardware Considerations
+
+<Warning>
+**Resource Usage**
+
+- Storage allocates `N * sizeof(T)` bits regardless of current size
+- Operations iterate over capacity N, not just valid elements
+- Use smallest capacity N that meets requirements
+- Consider `reserve<>` to change capacity if needs vary
+</Warning>
+
+<Note>
+**Parallel Operations**
+
+- `sharded_map` and `sharded_for_each` provide true parallelism
+- Each shard is an independent hardware instance
+- Use when throughput > 1 element/cycle is needed
+- Balance Shards parameter with area constraints
+</Note>
+
+## See Also
+
+- [Arrays](/library/data/arrays) - Fixed-size arrays
+- [FIFOs](/library/data/fifos) - Queue data structures
+- [Control Flow](/library/control/loops) - Iteration patterns

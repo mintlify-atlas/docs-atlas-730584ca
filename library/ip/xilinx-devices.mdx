@@ -1,0 +1,38 @@
+---
+title: Xilinx FPGA Support
+description: Configuration for Xilinx FPGA devices
+---
+
+The `xilinx.config` module provides device configuration for Xilinx FPGAs.
+
+## Overview
+
+```kanagawa
+import xilinx.config
+
+// Configuration is automatically applied
+// when xilinx.config is imported
+```
+
+## Supported Devices
+
+- Xilinx UltraScale+
+
+## Configuration
+
+The module sets Xilinx-specific defaults:
+
+- **Vendor**: Xilinx
+- **Memory Init Format**: MEM (Memory Initialization File)
+- **Quad-Port RAM**: Not supported (use dual-port)
+- **Array Cost Factors**: Tuned for Xilinx architecture
+
+## Device-Specific Modules
+
+```kanagawa
+import xilinx.ultrascaleplus.config  // UltraScale+
+```
+
+## See Also
+
+- [Intel Devices](/library/ip/intel-devices) - Intel FPGA support

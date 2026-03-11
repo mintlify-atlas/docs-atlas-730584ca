@@ -1,0 +1,258 @@
+---
+title: Memories
+description: Block RAM abstractions and configurations
+---
+
+The `data.memory` module provides type aliases for declaring block RAM memories with various port configurations and error correction options.
+
+## Overview
+
+Memories in Kanagawa abstract over FPGA block RAM resources, providing simple, dual-port, quad-port, and ECC-protected variants.
+
+```kanagawa
+import data.memory
+
+// Standard dual-port block RAM
+memory<uint32, 1024> ram;
+
+ram[addr] = data;        // Write
+auto value = ram[addr];  // Read
+```
+
+## Memory Types
+
+### `memory<T, N>`
+
+Standard memory (typically dual-port block RAM).
+
+```kanagawa
+memory<uint32, 256> my_ram;
+```
+
+<ParamField path="T" type="typename">
+  Element type
+</ParamField>
+
+<ParamField path="N" type="auto">
+  Depth (number of elements)
+</ParamField>
+
+### `memory_norep<T, N>`
+
+Non-replicated memory. Useful for very large memories where replication would be too costly.
+
+```kanagawa
+memory_norep<uint64, 16384> large_ram;
+```
+
+### `memory_init<T, N>`
+
+Memory with initialization to default value.
+
+```kanagawa
+memory_init<uint32, 128> initialized_ram;
+// All locations start at 0
+```
+
+## Error Correction (ECC)
+
+### ECC Types
+
+```kanagawa
+struct ecc<T> {
+    bool error;         // Error detected (corrected or uncorrected)
+    optional<T> data;   // Valid if no error or error was corrected
+}
+```
+
+### `memory_ecc<T, N>`
+
+ECC memory returning full error information.
+
+```kanagawa
+memory_ecc<uint32, 1024> ecc_ram;
+
+ecc_ram[addr] = 0x12345678;  // Write
+auto result = ecc_ram[addr];  // Read returns ecc<uint32>
+
+if (result.error) {
+    // Handle error
+}
+if (result.data.is_valid) {
+    // Use corrected data
+}
+```
+
+### `memory_ecc_strict<T, N>`
+
+ECC memory returning `optional<T>`. Invalid if any error detected.
+
+```kanagawa
+memory_ecc_strict<uint32, 1024> strict_ram;
+
+strict_ram[addr] = data;
+auto result = strict_ram[addr];  // optional<uint32>
+
+if (result.is_valid) {
+    // No errors (not even corrected ones)
+    process(result.value);
+}
+```
+
+### `memory_ecc_relaxed<T, N>`
+
+ECC memory returning `optional<T>`. Valid if no error or error was corrected.
+
+```kanagawa
+memory_ecc_relaxed<uint32, 1024> relaxed_ram;
+
+relaxed_ram[addr] = data;
+auto result = relaxed_ram[addr];  // optional<uint32>
+
+if (result.is_valid) {
+    // Data is usable (possibly corrected)
+    process(result.value);
+}
+```
+
+## Port Configurations
+
+### Dual Port (Default)
+
+Default memory type provides two ports for simultaneous read/write.
+
+```kanagawa
+class DualPortExample {
+    memory<uint32, 256> ram;
+    
+    void simultaneous_access() {
+        ram[addr1] = data1;      // Port 1: Write
+        auto value = ram[addr2];  // Port 2: Read
+    }
+}
+```
+
+### Quad Port
+
+On supported devices, use quad-port memory for concurrent access.
+
+```kanagawa
+template<typename T, auto N>
+using memory_quad_port = [[memory, quad_port]] T[N];
+
+class QuadPortExample {
+    memory_quad_port<uint32, 256> ram;
+    
+    void concurrent_access() {
+        // Two reads and two writes in parallel
+        ram[addr1] = data1;
+        ram[addr2] = data2;
+        auto val1 = ram[addr3];
+        auto val2 = ram[addr4];
+    }
+}
+```
+
+<Warning>
+Quad-port support depends on target device. Check device capabilities.
+</Warning>
+
+## Usage Patterns
+
+### Simple Storage
+
+```kanagawa
+class RegisterFile {
+    memory<uint32, 32> registers;
+    
+    uint32 read(index_t<32> addr) {
+        return registers[addr];
+    }
+    
+    void write(index_t<32> addr, uint32 data) {
+        registers[addr] = data;
+    }
+}
+```
+
+### Pipelined Access
+
+```kanagawa
+class PipelinedMemory {
+    memory<uint64, 1024> ram;
+    
+    [[pipelined]] uint64 read_pipeline(index_t<1024> addr) {
+        // Read has 1-2 cycle latency depending on device
+        return ram[addr];
+    }
+}
+```
+
+### With RISC-V Core
+
+```kanagawa
+import processor.risc_v
+
+// Use quad-port memory for concurrent core and EE access
+template<typename T, auto N>
+using memory_quad_port = [[memory, quad_port]] T[N];
+
+using RV = RISC_V<
+    1,              // HARTS
+    0x4000,         // IMEM_LENGTH
+    0x2000,         // DMEM_LENGTH  
+    0,              // MMIO_LENGTH
+    0,              // IMEM_ORIGIN
+    (0x4000 << 2),  // DMEM_ORIGIN
+    0,              // MMIO_ORIGIN
+    0x4000,         // IMEM_TCM_SIZE
+    memory_quad_port  // Quad-port for concurrent access
+>;
+```
+
+## Memory Initialization
+
+### From File
+
+```kanagawa
+[[memory, init_file("data.mif")]]
+uint32[256] rom;
+```
+
+### Const Array
+
+```kanagawa
+const uint8[16] init_data = {
+    0x00, 0x11, 0x22, 0x33,
+    0x44, 0x55, 0x66, 0x77,
+    0x88, 0x99, 0xAA, 0xBB,
+    0xCC, 0xDD, 0xEE, 0xFF
+};
+
+memory_init<uint8, 16> initialized = init_data;
+```
+
+## Hardware Considerations
+
+<Note>
+**Resource Usage**
+
+- **Block RAM**: Typically uses device block RAM primitives
+- **Area**: sizeof(T) × N bits
+- **Ports**: Dual-port is standard, quad-port uses 2× block RAMs
+- **Replication**: Non-replicated memories save area but may reduce Fmax
+</Note>
+
+<Note>
+**Timing**
+
+- **Read Latency**: Typically 1-2 cycles (synchronous read)
+- **Write Latency**: 1 cycle (data available next cycle)
+- **Registered Output**: Adds 1 cycle latency but improves Fmax
+</Note>
+
+## See Also
+
+- [Arrays](/library/data/arrays) - Fixed-size arrays
+- [Hash Tables](/library/data/hash-tables) - Associative lookup
+- [RISC-V Processor](/library/ip/risc-v-processor) - Using memories with CPU

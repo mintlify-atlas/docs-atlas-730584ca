@@ -1,0 +1,102 @@
+---
+title: Standard Library Overview
+description: Introduction to the Kanagawa Standard Library for hardware design
+---
+
+The Kanagawa Standard Library provides a comprehensive collection of reusable hardware components, data structures, and utilities for digital hardware design. Built with synthesis in mind, the library offers high-level abstractions that compile to efficient hardware implementations.
+
+## Library Organization
+
+The standard library is organized into several major categories:
+
+### Data Structures
+
+Hardware-optimized data structures for managing data in digital circuits:
+- **Arrays**: Fixed-size collections with parallel operations
+- **Vectors**: Variable-length arrays with dynamic sizing
+- **FIFOs**: First-in-first-out queues for dataflow
+- **Buffers**: Shift registers and data staging
+- **Hash Tables**: Key-value stores with hardware hashing
+- **Memories**: Block RAM abstractions with ECC support
+
+### Numeric Types
+
+Comprehensive numeric type support:
+- **Integers**: Arbitrary-width signed/unsigned integers with operators
+- **Fixed-Point**: Q-format fixed-point arithmetic with transcendental functions
+- **Floating-Point**: IEEE 754 single and double precision
+- **Complex**: Complex number arithmetic
+
+### Synchronization
+
+Primitives for managing concurrency and thread synchronization:
+- **Atomic**: Atomic operations on shared state
+- **Locks**: Mutexes, reader-writer locks, and semaphores
+
+### Control Flow
+
+High-level control flow abstractions that synthesize to efficient hardware:
+- **Loops**: Pipelined and parallel iteration constructs
+- **Async**: Asynchronous execution with fork-join patterns
+- **FSM**: Finite state machine helpers
+
+### IP Blocks
+
+Ready-to-use IP cores:
+- **RISC-V Processor**: Configurable RV32I soft core with optional M extension
+- **Intel Device Support**: Configuration for Intel FPGAs (Agilex, Stratix, Arria)
+- **Xilinx Device Support**: Configuration for Xilinx FPGAs (UltraScale+)
+
+## Design Philosophy
+
+The Kanagawa Standard Library follows these principles:
+
+1. **Hardware-First**: All abstractions are designed to synthesize to efficient hardware
+2. **Type Safety**: Strong typing prevents common hardware design errors
+3. **Parameterization**: Extensive use of templates for flexible, reusable components
+4. **Performance**: Parallel operations and pipelined execution where appropriate
+5. **Resource Awareness**: Explicit control over area/performance tradeoffs
+
+## Getting Started
+
+Import library modules using the `import` statement:
+
+```kanagawa
+import data.array
+import data.fifo
+import numeric.fixed
+
+// Use library components
+const auto arr = array::repeat<8>(0xFF);
+FIFO<uint32, 16> my_fifo;
+auto result = fixed::sqrt(x);
+```
+
+## Module System
+
+The library uses a hierarchical module structure:
+
+- `data.*` - Data structures and containers
+- `numeric.*` - Numeric types and operations
+- `sync.*` - Synchronization primitives
+- `control.*` - Control flow constructs
+- `processor.*` - Processor IP cores
+- `intel.*` - Intel FPGA configurations
+- `xilinx.*` - Xilinx FPGA configurations
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Data Structures" icon="database" href="/library/data/arrays">
+    Explore hardware-optimized data structures
+  </Card>
+  <Card title="Numeric Types" icon="calculator" href="/library/numeric/integers">
+    Learn about numeric type support
+  </Card>
+  <Card title="Control Flow" icon="code-branch" href="/library/control/loops">
+    Master control flow abstractions
+  </Card>
+  <Card title="IP Blocks" icon="microchip" href="/library/ip/risc-v-processor">
+    Integrate ready-to-use IP cores
+  </Card>
+</CardGroup>

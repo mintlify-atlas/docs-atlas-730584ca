@@ -1,0 +1,101 @@
+---
+title: "Introduction"
+description: "High-level synthesis language for hardware design with wavefront threading"
+---
+
+# Welcome to Kanagawa
+
+Kanagawa is a high-level, imperative programming language for hardware design that introduces **Wavefront Threading** — a new execution model making concurrency explicit, enabling efficient and predictable parallel hardware.
+
+Unlike traditional HLS tools that rely on pragmas and heuristics, Kanagawa lets you directly express concurrency, synchronization, and scheduling in code. This combines the productivity of software-like programming with the performance and efficiency of hand-written RTL.
+
+<CardGroup cols={2}>
+  <Card title="Quick Start" icon="rocket" href="/quickstart">
+    Get up and running with Kanagawa in minutes
+  </Card>
+  <Card title="Installation" icon="download" href="/installation">
+    Build and install the Kanagawa compiler
+  </Card>
+  <Card title="Language Guide" icon="book" href="/language/syntax">
+    Learn the Kanagawa programming language
+  </Card>
+  <Card title="Examples" icon="code" href="/examples/hello-world">
+    Explore real-world Kanagawa designs
+  </Card>
+</CardGroup>
+
+## Why Kanagawa?
+
+Kanagawa addresses a longstanding challenge in digital design: bridging the gap between high-level programming and efficient hardware implementation.
+
+<CardGroup cols={2}>
+  <Card title="Wavefront Threading" icon="wave-pulse">
+    Threads execute in deterministic order, eliminating synchronization burden
+  </Card>
+  <Card title="Wavefront Consistency" icon="microchip">
+    Memory model aligned with synchronous circuits for clarity and correctness
+  </Card>
+  <Card title="Zero-Cost Abstractions" icon="layer-group">
+    Functions, lambdas, closures, and strong static typing
+  </Card>
+  <Card title="Rich Standard Library" icon="books">
+    Generic data structures, algorithms, and IP blocks including RISC-V cores
+  </Card>
+</CardGroup>
+
+## Key Features
+
+### Explicit Concurrency
+Express parallelism directly in your code without relying on compiler heuristics. Wavefront Threading provides deterministic execution order while maintaining high performance.
+
+### Competitive Performance
+Kanagawa designs match or surpass hand-written RTL in area, performance, and power — often with less than half the code. Used in production for Microsoft Azure accelerators and cryptographic research.
+
+### Composable Design
+Build complex hardware from reusable components. The standard library includes data structures (arrays, FIFOs, hash tables), numeric types (fixed-point, floating-point, complex), and complete IP blocks like RISC-V processors.
+
+### Hardware-Software Bridge
+Write hardware designs using familiar programming constructs: functions, classes, loops, and conditionals. The compiler generates efficient SystemVerilog that integrates seamlessly with existing HDL workflows.
+
+## Research Background
+
+Kanagawa is based on research published in the ACM paper [Wavefront Threading Enables Effective High-Level Synthesis](https://dl.acm.org/doi/10.1145/3656420). The language and compiler have been validated in real-world applications including:
+
+- Accelerators deployed in Microsoft Azure
+- Cryptographic research prototypes
+- Full RISC-V processor cores with multi-hart support
+- Custom instruction extensions and specialized compute engines
+
+## Getting Started
+
+<Steps>
+  <Step title="Install Dependencies">
+    Set up your build environment with GCC, Haskell, Boost, and Verilator
+  </Step>
+  <Step title="Build the Compiler">
+    Clone the repository and build the Kanagawa compiler using CMake
+  </Step>
+  <Step title="Write Your First Design">
+    Create a simple hardware design using Kanagawa's intuitive syntax
+  </Step>
+  <Step title="Compile to RTL">
+    Generate SystemVerilog RTL ready for simulation or synthesis
+  </Step>
+</Steps>
+
+<Card title="Read the Quickstart Guide" icon="bolt" href="/quickstart">
+  Follow our step-by-step guide to create your first Kanagawa design
+</Card>
+
+## Open Source
+
+Kanagawa is open source under the MIT License. We welcome contributions from hardware designers, language researchers, and anyone interested in advancing hardware programming.
+
+<CardGroup cols={2}>
+  <Card title="View on GitHub" icon="github" href="https://github.com/microsoft/kanagawa">
+    Explore the source code and repository
+  </Card>
+  <Card title="Contributing" icon="code-pull-request" href="/resources/contributing">
+    Learn how to contribute to Kanagawa
+  </Card>
+</CardGroup>
